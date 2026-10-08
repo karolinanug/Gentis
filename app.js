@@ -76,13 +76,16 @@ function saveDraft() {
   ls.set(draftKey(), state.draft ? JSON.stringify(state.draft) : null);
 }
 
+function clearDraft() {
+  state.draft = null;
+  saveDraft();
+  $("#topic").value = "";
+  renderResult();
+}
+
 function loadDraft() {
-  // Senas bendras juodraštis (iki atskirų juodraščių) atitenka pirmai prisijungusiai narei
-  const legacy = ls.get("juodrastis");
-  if (legacy) {
-    if (!ls.get(draftKey())) ls.set(draftKey(), legacy);
-    ls.set("juodrastis", null);
-  }
+  // Senas bendras juodraštis (iki atskirų juodraščių) – nežinia, kieno, todėl išmetamas
+  ls.set("juodrastis", null);
   try { state.draft = JSON.parse(ls.get(draftKey())); } catch (e) { state.draft = null; }
   $("#topic").value = state.draft ? state.draft.topic || "" : "";
   $("#suggestions").hidden = true;
@@ -153,7 +156,7 @@ function rememberCode() {
   if (state.me) return true;
   const code = $("#code").value.trim();
   if (!code) {
-    showError("Įvesk būrelio kodą");
+    showError("Įvesk genties kodą");
     $("#code").focus();
     return false;
   }
@@ -366,7 +369,18 @@ function actionsBar() {
     save,
     d.id && d.date && d.date >= today() ? revealButton(d) : null,
     copy,
-    h("button", { class: "secondary", type: "button", text: "Spausdinti", onclick: () => window.print() })
+    h("button", { class: "secondary", type: "button", text: "Spausdinti", onclick: () => window.print() }),
+    h("button", {
+      class: "secondary",
+      type: "button",
+      text: "Naujas scenarijus",
+      onclick: () => {
+        if (confirm("Išvalyti šį scenarijų ir pradėti naują? Archyve išsaugotas liks.")) {
+          clearDraft();
+          window.scrollTo(0, 0);
+        }
+      },
+    })
   );
 }
 
@@ -386,6 +400,12 @@ function asText() {
 
 async function saveToArchive(btn) {
   const d = state.draft;
+  if (!d.date) {
+    alert("Įrašyk susitikimo datą „Vakaro plane“ – pagal ją tema atsivers kitoms narėms po susitikimo.");
+    const input = $("#result .timing input[type=date]");
+    if (input) input.focus();
+    return;
+  }
   btn.disabled = true;
   btn.textContent = "Saugoma…";
   try {
@@ -620,6 +640,9 @@ function chime() {
 async function loadArchive() {
   const { items } = await api("/api/archive", { method: "GET" });
   state.archive = items;
+  // Juodraštis, kuris iš tikrųjų yra kitos narės dar slaptas susitikimas, – išvalomas
+  const d = state.draft;
+  if (d && d.id && items.some((i) => i.id === d.id && i.hidden)) clearDraft();
   checkTopicUsed();
   return items;
 }
@@ -629,7 +652,7 @@ function renderGate(root, title, then) {
   const err = h("p", { class: "error", hidden: true });
   const form = h("form", { class: "card" },
     h("h2", { text: title }),
-    h("label", { class: "mini" }, "Būrelio kodas", input),
+    h("label", { class: "mini" }, "Genties kodas", input),
     h("div", { class: "actions" }, h("button", { class: "primary small", type: "submit", text: "Tęsti" })),
     err,
     h("p", { class: "hint", text: "Arba prisijunk skiltyje „Kalendorius“." })
@@ -838,7 +861,7 @@ function googleCard(fail) {
     const form = h("form", {},
       h("p", { class: "hint", style: "margin:0 0 12px", text: "Pirmas kartas – dar trūksta dviejų dalykų:" }),
       h("label", { class: "mini" }, "Vardas (taip tave matys kitos)", name),
-      h("label", { class: "mini", style: "margin-top:10px" }, "Būrelio kodas", code),
+      h("label", { class: "mini", style: "margin-top:10px" }, "Genties kodas", code),
       h("div", { class: "actions" }, h("button", { class: "primary small", type: "submit", text: "Baigti registraciją" }))
     );
     form.onsubmit = async (e) => {
@@ -890,7 +913,7 @@ function renderAuth(root) {
   const register = h("form", { hidden: true },
     h("label", { class: "mini" }, "Vardas (taip tave matys kitos)", rName),
     h("label", { class: "mini", style: "margin-top:10px" }, "Slaptažodis (bent 6 simboliai)", rPass),
-    h("label", { class: "mini", style: "margin-top:10px" }, "Būrelio kodas", rCode),
+    h("label", { class: "mini", style: "margin-top:10px" }, "Genties kodas", rCode),
     h("button", { class: "primary", style: "margin-top:16px", type: "submit", text: "Susikurti paskyrą" })
   );
   register.onsubmit = async (e) => {
@@ -918,8 +941,8 @@ function renderAuth(root) {
   setMode(false);
 
   root.replaceChildren(...[
-    h("h1", { text: "Būrelio vakaras" }),
-    h("p", { class: "lead", text: "Mūsų būrelio susitikimų planavimas: temos, klausimai ir kito susitikimo data." }),
+    h("h1", { text: "Gentis" }),
+    h("p", { class: "lead", text: "Mūsų susitikimų planavimas: temos, klausimai ir kito susitikimo data." }),
     state.googleClientId ? googleCard(fail) : null,
     h("div", { class: "card" },
       title,

@@ -34,7 +34,7 @@ module.exports = async (req, res) => {
 
       // Pirmas kartas – reikia būrelio kodo ir vardo
       if (!code) return res.status(200).json({ needsSignup: true, suggestedName: g.name });
-      if (!auth.codeOk(code)) return res.status(401).json({ error: "Neteisingas būrelio kodas" });
+      if (!auth.codeOk(code)) return res.status(401).json({ error: "Neteisingas genties kodas" });
       if (badName) return res.status(400).json({ error: "Vardas turi būti 2–40 simbolių" });
       const record = JSON.stringify({ name: cleanName, google: g.sub, email: g.email });
       const created = await store.cmd("HSETNX", "users", id, record);
@@ -79,7 +79,7 @@ module.exports = async (req, res) => {
     }
 
     if (action === "register") {
-      if (!auth.codeOk(code)) return res.status(401).json({ error: "Neteisingas būrelio kodas" });
+      if (!auth.codeOk(code)) return res.status(401).json({ error: "Neteisingas genties kodas" });
       if (badName) return res.status(400).json({ error: "Vardas turi būti 2–40 simbolių" });
       if (typeof password !== "string" || password.length < 6 || password.length > 100) {
         return res.status(400).json({ error: "Slaptažodis turi būti bent 6 simbolių" });

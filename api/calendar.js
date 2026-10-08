@@ -11,7 +11,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 module.exports = async (req, res) => {
   if (!store.enabled()) return res.status(503).json({ error: store.MISSING });
   const access = await checkAccess(req);
-  if (!access) return res.status(401).json({ error: "Neteisingas būrelio kodas" });
+  if (!access) return res.status(401).json({ error: "Neteisingas genties kodas" });
   const user = access.user;
   const today = store.today();
 

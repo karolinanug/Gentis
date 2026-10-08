@@ -42,7 +42,7 @@ function str(value, max) {
 
 function systemPrompt() {
   return [
-    "Tu padedi draugių būrelio vedančiajai pasiruošti susitikimui.",
+    "Tu padedi draugių būrelio „Gentis“ vedančiajai pasiruošti susitikimui.",
     "Būrelis renkasi kas dvi savaites ir kalbasi viena iš anksto pasirinkta tema.",
     "Rašai taisyklinga, gyva, šilta lietuvių kalba, kreipiesi į moteris.",
     "Klausimai turi būti atviri (ne taip/ne), konkretūs, skatinantys pasakoti istorijas.",
@@ -135,7 +135,7 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: "Serveryje nenustatytas ANTHROPIC_API_KEY" });
   }
   if (!(await checkAccess(req))) {
-    return res.status(401).json({ error: "Neteisingas būrelio kodas" });
+    return res.status(401).json({ error: "Neteisingas genties kodas" });
   }
 
   const mode = body.mode || (body.replace ? "replace" : "scenario");
