@@ -5,6 +5,7 @@
 //                                   daugiausiai balsų – ji patvirtinama automatiškai.
 //   POST {meeting: {...}}         – paskirti / pakeisti susitikimą (null – atšaukti)
 //   POST {nextHost: "Vardas"}     – pakeisti kito susitikimo vedančiąją, kol data nepaskirta
+//   POST {absent: true|false}     – „šį kartą dalyvauti negalėsiu“ (galioja iki susitikimo pabaigos)
 //
 // Patvirtinus susitikimą ar pakeitus vedančiąją, jai siunčiamas laiškas (lib/mail.js).
 
@@ -61,6 +62,12 @@ async function loadPeople(today) {
   return { users, availability };
 }
 
+// Kurios narės pažymėjo, kad šį kartą negalės (žyma galioja vienam susitikimų ratui)
+async function loadAbsent(rotation) {
+  const raw = store.toObject(await store.cmd("HGETALL", "absent"));
+  return Object.keys(raw).filter((id) => (store.parse(raw[id]) || {}).round === rotation.lastDate);
+}
+
 function formatDate(date) {
   const text = new Date(`${date}T12:00:00Z`).toLocaleDateString("lt-LT", {
     month: "long", day: "numeric", weekday: "long", timeZone: "UTC",
@@ -97,9 +104,9 @@ async function notifyHost(meeting, users, reason) {
 }
 
 // Kai visos eilės narės pasižymėjo ir viena diena surinko daugiausiai balsų
-function autoMeeting(rotation, users, availability, today) {
+function autoMeeting(rotation, users, availability, today, absent) {
   const voters = rotation.order.map(key);
-  const allVoted = voters.every((id) => users[id] && availability[id].some((d) => d > rotation.lastDate));
+  const allVoted = voters.every((id) => users[id] && (absent.includes(id) || availability[id].some((d) => d > rotation.lastDate)));
   if (!allVoted) return null;
   const counts = {};
   for (const dates of Object.values(availability)) {
@@ -121,7 +128,7 @@ async function withTopic(meeting) {
     : { ...meeting, topicState: "secret" };
 }
 
-function view(rotation, users, availability, meeting, user) {
+function view(rotation, users, availability, meeting, user, absent) {
   const members = Object.entries(users)
     .map(([id, u]) => ({ id, name: u.name || id, picture: u.picture || "" }))
     .sort((a, b) => a.name.localeCompare(b.name, "lt"));
@@ -129,6 +136,7 @@ function view(rotation, users, availability, meeting, user) {
     members,
     availability,
     meeting,
+    absent,
     me: user ? user.id : null,
     myEmail: user && users[user.id] ? users[user.id].email || "" : "",
     mailEnabled: mailEnabled(),
@@ -153,9 +161,20 @@ module.exports = async (req, res) => {
   try {
     const { rotation, meeting } = await settle(today);
     const { users, availability } = await loadPeople(today);
+    const absent = await loadAbsent(rotation);
+
+    // Patvirtina datą automatiškai, jei visos atsakė ir viena diena pirmauja
+    const tryAutoConfirm = async () => {
+      if (meeting) return { confirmed: null, emailed: false };
+      const confirmed = autoMeeting(rotation, users, availability, today, absent);
+      if (!confirmed) return { confirmed: null, emailed: false };
+      await store.cmd("SET", "meeting", JSON.stringify(confirmed));
+      const emailed = await notifyHost(confirmed, users, "Visos narės atsakė, ir kito susitikimo data patvirtinta automatiškai.");
+      return { confirmed, emailed };
+    };
 
     if (req.method === "GET") {
-      return res.status(200).json(view(rotation, users, availability, await withTopic(meeting), user));
+      return res.status(200).json(view(rotation, users, availability, await withTopic(meeting), user, absent));
     }
 
     if (!user) return res.status(401).json({ error: "Prisijunk, kad galėtum žymėti" });
@@ -167,24 +186,35 @@ module.exports = async (req, res) => {
         .slice(0, 200);
       await store.cmd("HSET", "avail", user.id, JSON.stringify(clean));
       availability[user.id] = clean;
-
-      let confirmed = null;
-      let emailed = false;
-      if (!meeting) {
-        confirmed = autoMeeting(rotation, users, availability, today);
-        if (confirmed) {
-          await store.cmd("SET", "meeting", JSON.stringify(confirmed));
-          emailed = await notifyHost(confirmed, users, "Visos narės pasižymėjo, ir kito susitikimo data patvirtinta automatiškai.");
-        }
+      if (clean.length && absent.includes(user.id)) {
+        // pasižymėjo dienas – vadinasi, vis dėlto galės
+        await store.cmd("HDEL", "absent", user.id);
+        absent.splice(absent.indexOf(user.id), 1);
       }
-      return res.status(200).json({ dates: clean, meeting: confirmed || meeting, autoConfirmed: Boolean(confirmed), emailed });
+      const { confirmed, emailed } = await tryAutoConfirm();
+      return res.status(200).json({ dates: clean, meeting: confirmed || meeting, autoConfirmed: Boolean(confirmed), emailed, absent });
+    }
+
+    if (req.method === "POST" && req.body && "absent" in req.body) {
+      if (req.body.absent) {
+        await store.cmd("HSET", "absent", user.id, JSON.stringify({ round: rotation.lastDate }));
+        await store.cmd("HSET", "avail", user.id, "[]");
+        availability[user.id] = [];
+        if (!absent.includes(user.id)) absent.push(user.id);
+      } else {
+        await store.cmd("HDEL", "absent", user.id);
+        if (absent.includes(user.id)) absent.splice(absent.indexOf(user.id), 1);
+      }
+      const { confirmed, emailed } = await tryAutoConfirm();
+      const out = view(rotation, users, availability, await withTopic(confirmed || meeting), user, absent);
+      return res.status(200).json({ ...out, autoConfirmed: Boolean(confirmed), emailed });
     }
 
     if (req.method === "POST" && req.body && "nextHost" in req.body) {
       const name = String(req.body.nextHost || "").trim().slice(0, 40);
       rotation.override = name && key(name) !== key(rotation.order[rotation.next]) ? name : "";
       await saveRotation(rotation);
-      return res.status(200).json(view(rotation, users, availability, meeting, user));
+      return res.status(200).json(view(rotation, users, availability, meeting, user, absent));
     }
 
     if (req.method === "POST") {

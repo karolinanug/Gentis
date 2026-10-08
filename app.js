@@ -841,13 +841,13 @@ function openHost() {
   $("#host").hidden = false;
   document.body.classList.add("no-scroll");
   document.addEventListener("keydown", hostKeys);
-  host.timer = setInterval(tick, 1000);
+  startTicking();
   renderHost();
 }
 
 // Paskutinė skaidrė: ar susitikimas įvyko? Tada – į archyvą
 function showFinish() {
-  clearInterval(host.timer);
+  clearTimeout(host.timer);
   const err = h("p", { class: "error", hidden: true });
   const yes = h("button", { class: "next", type: "button", text: "✓ Taip, susitikimas įvyko" });
   yes.onclick = async () => {
@@ -887,7 +887,7 @@ function showFinish() {
 }
 
 function closeHost() {
-  clearInterval(host.timer);
+  clearTimeout(host.timer);
   document.removeEventListener("keydown", hostKeys);
   $("#host").hidden = true;
   document.body.classList.remove("no-scroll");
@@ -907,17 +907,32 @@ function resetSlide() {
   host.notified = false;
 }
 
+// Laikmatis, kuris kas sekundę susilygina su tikru laiku (setInterval „plaukioja“),
+// kad paskutinių sekundžių tiksėjimas būtų tolygus
+function startTicking() {
+  clearTimeout(host.timer);
+  const anchor = performance.now();
+  let n = 0;
+  const loop = () => {
+    n++;
+    host.timer = setTimeout(() => { tick(); loop(); }, Math.max(0, anchor + n * 1000 - performance.now()));
+  };
+  loop();
+}
+
 function move(delta) {
   const n = host.i + delta;
   if (n >= host.slides.length) { showFinish(); return; }
   if (n < 0) return;
   host.i = n;
   resetSlide();
+  startTicking();
   renderHost();
 }
 
 function togglePause() {
   host.running = !host.running;
+  if (host.running) startTicking();
   renderClock();
 }
 
@@ -983,7 +998,7 @@ function makeWav(notes, gap = 0) {
     const out = new Float32Array(n + Math.floor(rate * gap));
     for (let i = 0; i < n; i++) {
       const t = i / rate;
-      const env = Math.min(1, t / 0.01) * Math.exp(-3 * t / dur);
+      const env = Math.min(1, t / 0.004) * Math.exp(-(dur < 0.1 ? 6 : 3) * t / dur);
       out[i] = env * (Math.sin(2 * Math.PI * freq * t) + 0.3 * Math.sin(4 * Math.PI * freq * t)) * 0.6;
     }
     return out;
@@ -1008,19 +1023,23 @@ function unlockSounds() {
   // Leidžia grojant net kai iPhone begarsio režimo jungiklis įjungtas (Safari 17+)
   try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
   if (!sounds.tick) {
-    sounds.tick = new Audio(makeWav([[880, 0.18]]));
-    sounds.end = new Audio(makeWav([[659.25, 0.35], [783.99, 0.35], [1046.5, 0.9]]));
+    const tickUrl = makeWav([[1200, 0.07]]);
+    sounds.tick = [new Audio(tickUrl), new Audio(tickUrl)]; // pakaitomis – kad nė vienas „tik“ nepavėluotų
+    sounds.end = [new Audio(makeWav([[659.25, 0.35], [783.99, 0.35], [1046.5, 0.9]]))];
+    for (const list of Object.values(sounds)) for (const a of list) { a.preload = "auto"; a.load(); }
   }
   // Pirmas grojimas turi įvykti paspaudus mygtuką – tada telefonas leidžia groti ir vėliau
-  for (const a of Object.values(sounds)) {
+  for (const a of Object.values(sounds).flat()) {
     a.muted = true;
     a.play().then(() => { a.pause(); a.currentTime = 0; a.muted = false; }).catch(() => { a.muted = false; });
   }
 }
 
+let soundTurn = 0;
 function playSound(name) {
-  const a = sounds[name];
-  if (!soundOn || !a) return;
+  const list = sounds[name];
+  if (!soundOn || !list) return;
+  const a = list[soundTurn++ % list.length];
   try {
     a.currentTime = 0;
     a.play().catch(() => {});
@@ -1488,6 +1507,22 @@ async function setMeeting(meeting) {
   }
 }
 
+async function setAbsent(flag) {
+  try {
+    const r = await api("/api/calendar", { body: { absent: flag } });
+    state.calendar = r;
+    state.meeting = r.meeting;
+    state.calStatus = r.autoConfirmed
+      ? `🎉 Visos atsakė – data patvirtinta automatiškai: ${fmtDate(r.meeting.date)}.` + (r.emailed ? ` Vedančiajai ${r.meeting.host} išsiųstas laiškas.` : "")
+      : flag ? "Pažymėta: šį kartą negalėsi dalyvauti." : "";
+    drawCalendar();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+const isAbsent = (cal, idOrName) => (cal.absent || []).includes(String(idOrName).toLowerCase());
+
 async function setNextHost(name) {
   try {
     const r = await api("/api/calendar", { body: { nextHost: name } });
@@ -1529,6 +1564,7 @@ function rotationCard(cal) {
       )
     )),
     swapped ? h("p", { class: "hint", style: "text-align:center", text: `Šį kartą veda ${host} (pagal eilę – ${scheduled}).` }) : null,
+    isAbsent(cal, host) ? h("p", { class: "absent-warn", text: `⚠ ${host} pažymėjo, kad negalės dalyvauti – pasirinkite kitą vedančiąją.` }) : null,
     h("div", { class: "row", style: "margin-top:14px;align-items:end" },
       h("label", { class: "mini" }, "Kitą susitikimą veda",
         hostSelect(cal, host, (name) => {
@@ -1595,6 +1631,12 @@ function meetingCard(cal) {
       h("button", { class: "secondary small", type: "button", text: "Išsaugoti", onclick: () => setMeeting({ ...m, time: time.value, place: place.value }) }),
       h("button", { class: "secondary small", type: "button", text: "Atšaukti susitikimą", onclick: () => confirm("Atšaukti paskirtą susitikimą?") && setMeeting(null) })
     ),
+    (cal.absent || []).length
+      ? h("p", { class: "absent-line", text: `🙅 Negalės: ${cal.absent.map((id) => (cal.members.find((x) => x.id === id) || {}).name || id).join(", ")}` })
+      : null,
+    isAbsent(cal, state.me.id)
+      ? h("button", { class: "link", type: "button", text: "Vis dėlto galėsiu dalyvauti", onclick: () => setAbsent(false) })
+      : h("button", { class: "link", type: "button", text: "🙅 Negalėsiu dalyvauti šiame susitikime", onclick: () => confirm("Pažymėti, kad šiame susitikime dalyvauti negalėsi?") && setAbsent(true) }),
     m.setBy ? h("p", { class: "hint", text: m.auto ? "Patvirtinta automatiškai pagal balsus" : `Paskyrė ${m.setBy}` }) : null
   );
 }
@@ -1626,6 +1668,7 @@ function drawCalendar() {
   const toggle = (iso) => {
     if (mine.has(iso)) mine.delete(iso); else mine.add(iso);
     cal.availability[meId] = [...mine].sort();
+    if (mine.size) cal.absent = (cal.absent || []).filter((id) => id !== meId);
     state.calStatus = "";
     drawCalendar();
     scheduleSave();
@@ -1674,12 +1717,13 @@ function drawCalendar() {
   // Balsavimo būsena pagal eilės nares
   const voted = (name) => (cal.availability[name.toLowerCase()] || []).some((d) => d > after);
   const order = cal.rotation.order;
-  const missing = order.filter((n) => !voted(n));
+  const missing = order.filter((n) => !voted(n) && !isAbsent(cal, n));
+  const absentNames = (cal.absent || []).map(nameOf);
   const tie = ranked.length > 1 && ranked[0][1].length === ranked[1][1].length;
   const voteNote = cal.meeting
     ? null
     : missing.length
-      ? `Pasižymėjo ${order.length - missing.length} iš ${order.length}. Dar laukiama: ${missing.join(", ")}.`
+      ? `Atsakė ${order.length - missing.length} iš ${order.length}. Dar laukiama: ${missing.join(", ")}.`
       : tie
         ? "Visos pasižymėjo, bet kelios dienos surinko po lygiai balsų – paskirkite vieną iš jų ranka."
         : null;
@@ -1700,11 +1744,25 @@ function drawCalendar() {
         h("span", {}, h("b", { class: "l-dot" }), "viena narė"),
         h("span", { text: "★ susitikimas" })
       ),
+      cal.meeting
+        ? null
+        : isAbsent(cal, meId)
+          ? h("p", { class: "absent-me" },
+              "🙅 Pažymėjai, kad šį kartą dalyvauti negalėsi. ",
+              h("button", { class: "link", type: "button", text: "Atšaukti", onclick: () => setAbsent(false) })
+            )
+          : h("button", {
+              class: "secondary small absent-btn",
+              type: "button",
+              text: "🙅 Šį kartą dalyvauti negalėsiu",
+              onclick: () => confirm("Pažymėti, kad šį kartą negalėsi dalyvauti? Tavo pažymėtos dienos bus išvalytos.") && setAbsent(true),
+            }),
       h("p", { class: "status", id: "cal-status", text: state.calStatus })
     ),
     h("div", { class: "card" },
       h("h2", { text: "Geriausios dienos" }),
       voteNote ? h("p", { class: "hint", style: "margin:0 0 10px", text: voteNote }) : null,
+      !cal.meeting && absentNames.length ? h("p", { class: "absent-line", text: `🙅 Negalės: ${absentNames.join(", ")}` }) : null,
       ranked.length
         ? h("ol", { class: "best-list" }, ranked.map(([d, ids]) =>
             h("li", {},
