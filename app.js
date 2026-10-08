@@ -77,6 +77,8 @@ const GROUNDING = {
   text: "Atsisėskime patogiai ir užsimerkime. Giliai įkvėpkime per nosį ir lėtai iškvėpkime – tris kartus. Pajuskime, kaip pėdos remiasi į žemę, ir palikime dienos rūpesčius už durų.",
 };
 // Kiekvieno susitikimo pradžia: įsižeminimas ir du pasisakymų ratai
+// Kiekvieno susitikimo pabaiga: uždarantis ratas
+const CLOSING_ROUND = { key: "roundEnd", questions: ["Kaip jaučiuosi dabar?", "Ką išsinešu iš šio susitikimo?"], minutes: 15 };
 const ROUNDS = [
   { key: "round1", questions: ["Kaip šiandien jaučiuosi?", "Kas įvyko nuo praeito susitikimo?", "Ko tikiuosi iš šiandienos susitikimo?"], minutes: 20 },
   { key: "round2", questions: ["Jei dirbčiau vidinį darbą, kokia tema kalbėčiau?"], minutes: 10 },
@@ -88,13 +90,13 @@ const SECTIONS = [
   ["main", "Klausimai"],
   ["closing", "Užbaigimas"],
 ];
-const DEFAULT_TIMING = { main: 10, round1: 20, round2: 10 };
-const DEFAULT_ACTIVITY_TIMING = { closing: 10, round1: 20, round2: 10 };
+const DEFAULT_TIMING = { main: 10, round1: 20, round2: 10, roundEnd: 15 };
+const DEFAULT_ACTIVITY_TIMING = { round1: 20, round2: 10, roundEnd: 15 };
 const roundMinutes = (d, r) => (d.timing && d.timing[r.key] != null ? Number(d.timing[r.key]) || 0 : r.minutes);
 
 const kindOf = (d) => (d && d.kind === "veikla" ? "veikla" : "pokalbis");
 const selectedKind = () => ($("input[name=kind]:checked") || {}).value || "pokalbis";
-const sectionsFor = (d) => (kindOf(d) === "veikla" ? [["closing", "Užbaigimas"]] : [["main", "Klausimai"]]);
+const sectionsFor = (d) => (kindOf(d) === "veikla" ? [] : [["main", "Klausimai"]]);
 
 // Pokalbio klausimus sujungia į vieną sąrašą (seniems scenarijams)
 function normalize(d) {
@@ -280,10 +282,37 @@ function meetingDate() {
   return state.meeting?.date || "";
 }
 
+// Nupieštas katinėlis (žiūri į dešinę). Kojos, uodega ir kūnas animuojami CSS.
+const CAT_SVG = `
+<svg viewBox="0 0 64 42" width="58" height="38" xmlns="http://www.w3.org/2000/svg">
+  <g class="cat-bob">
+    <path class="cat-tail" d="M16 19 C 9 18, 5 13, 6 5" fill="none" stroke="#c8743f" stroke-width="4" stroke-linecap="round"/>
+    <g stroke-linecap="round" stroke-width="4">
+      <line class="leg leg-far leg-b" x1="20" y1="22" x2="20" y2="34" stroke="#a85f33"/>
+      <line class="leg leg-far leg-a" x1="41" y1="22" x2="41" y2="34" stroke="#a85f33"/>
+    </g>
+    <ellipse cx="30" cy="20" rx="16" ry="8.5" fill="#d9894f"/>
+    <path d="M24 12.5 q1.5 4 0 8 M30 11.8 q1.5 4 0 8.5 M36 12.5 q1.5 4 0 8" fill="none" stroke="#b5683a" stroke-width="1.6" stroke-linecap="round"/>
+    <g stroke-linecap="round" stroke-width="4">
+      <line class="leg leg-a" x1="18" y1="23" x2="18" y2="35" stroke="#d9894f"/>
+      <line class="leg leg-b" x1="39" y1="23" x2="39" y2="35" stroke="#d9894f"/>
+    </g>
+    <path d="M42 9 L44 1.5 L48.5 7.5 Z" fill="#c8743f"/>
+    <path d="M50 7.5 L54.5 1.5 L55.5 9.5 Z" fill="#c8743f"/>
+    <circle cx="49" cy="14" r="8.5" fill="#d9894f"/>
+    <path d="M44.5 4.5 L45 7.5 L47 6.5 Z M52.5 6.8 L54 4 L54.4 7.8 Z" fill="#f0b9a0"/>
+    <ellipse class="cat-eye" cx="52" cy="12.5" rx="1.3" ry="1.6" fill="#2e2622"/>
+    <path d="M56.2 15.2 l1.6 -0.6 l-0.4 1.5 Z" fill="#e58a8a"/>
+    <path d="M55 17.5 q1.5 1 3 0" fill="none" stroke="#2e2622" stroke-width="0.9" stroke-linecap="round"/>
+    <path d="M57 15.5 l5 -1 M57 16.5 l5 0.8" stroke="#f7f1ea" stroke-width="0.7" stroke-linecap="round"/>
+  </g>
+</svg>`;
+
 // Katinėlis, bėgantis įkrovimo juosta
 function catLoader(text) {
   const fill = h("span", { class: "cat-fill" });
-  const cat = h("span", { class: "cat", "aria-hidden": "true", text: "🐈" });
+  const cat = h("span", { class: "cat", "aria-hidden": "true" });
+  cat.innerHTML = CAT_SVG;
   const el = h("div", { class: "cat-loader", role: "status" },
     h("p", { class: "cat-text", text }),
     h("div", { class: "cat-track" }, fill, cat)
@@ -406,13 +435,22 @@ function contentBlocks(d) {
   return [kindOf(d) === "veikla" ? activitiesBlock(d) : null, sections];
 }
 
-// Nekeičiama kiekvieno susitikimo pradžia
+// Nekeičiama kiekvieno susitikimo pradžia ir pabaiga
 function openingBlock() {
   return h("div", { class: "opening" },
     h("p", { class: "label", text: "Vakaro pradžia (kiekvieną kartą)" }),
     h("ol", { class: "opening-list" },
       h("li", { class: "plain" }, h("span", {}, h("strong", { text: "Įsižeminimas" }), ` · ${GROUNDING.minutes} min.`)),
       ROUNDS.map((r, i) => h("li", { class: "plain" }, h("span", {}, h("strong", { text: `${i + 1} ratas: ` }), r.questions.join(" ")))),
+    )
+  );
+}
+
+function closingBlock() {
+  return h("div", { class: "opening" },
+    h("p", { class: "label", text: "Vakaro pabaiga (kiekvieną kartą)" }),
+    h("ol", { class: "opening-list" },
+      h("li", { class: "plain" }, h("span", {}, h("strong", { text: "Uždarantis ratas: " }), CLOSING_ROUND.questions.join(" ")))
     )
   );
 }
@@ -424,6 +462,7 @@ function renderReview(d, kindLabel) {
     h("p", { class: "hint", text: "Spustelk ant bet kurio teksto, kad jį pataisytum savais žodžiais, arba spausk „Kitas“." }),
     editable("p", { class: "intro" }, d.scenario.intro || "", (v) => { d.scenario.intro = v; }),
     contentBlocks(d),
+    closingBlock(),
     h("div", { class: "actions" },
       h("button", { class: "primary small", type: "button", text: `✓ ${kindLabel === "veiklos" ? "Veiklos" : "Klausimai"} tinka`, onclick: () => setStage("config") }),
       newScenarioButton()
@@ -485,10 +524,9 @@ async function swap(section, index, btn) {
 // Kiek minučių suplanuota (su įsižeminimu)
 function planMinutes(d) {
   const t = d.timing || {};
-  let mins = GROUNDING.minutes + ROUNDS.reduce((sum, r) => sum + roundMinutes(d, r), 0);
+  let mins = GROUNDING.minutes + [...ROUNDS, CLOSING_ROUND].reduce((sum, r) => sum + roundMinutes(d, r), 0);
   if (kindOf(d) === "veikla") {
     mins += (d.scenario.activities || []).reduce((sum, a) => sum + (Number(a.minutes) || 0), 0);
-    mins += (d.scenario.closing || []).length * (Number(t.closing) || 0);
   } else {
     mins += SECTIONS.reduce((sum, [k]) => sum + (d.scenario[k] || []).length * (Number(t[k]) || 0), 0);
   }
@@ -510,7 +548,7 @@ function renderConfig(d) {
     const mins = planMinutes(d);
     const left = MEETING_MINUTES - mins;
     total.textContent =
-      `Suplanuota ${fmtMinutes(mins)} iš 3 val., įskaitant įsižeminimą ir pasisakymų ratus. ` +
+      `Suplanuota ${fmtMinutes(mins)} iš 3 val., įskaitant įsižeminimą ir ratus. ` +
       (left >= 0 ? `Laisvo laiko lieka ${fmtMinutes(left)}` : `Viršyta ${fmtMinutes(-left)}`);
     total.classList.toggle("over-plan", left < 0);
   };
@@ -539,7 +577,6 @@ function renderConfig(d) {
           (d.scenario.activities || []).map((a) =>
             h("label", { class: "mini inline-row" }, h("span", { text: a.title }), number(a.minutes, (v) => { a.minutes = v; }, 180))
           ),
-          h("label", { class: "mini inline-row" }, h("span", { text: "Užbaigimo klausimas" }), number(d.timing.closing, (v) => { d.timing.closing = v; })),
         ]
       : [
           h("label", { class: "mini inline-row", style: "margin-top:16px" },
@@ -547,6 +584,11 @@ function renderConfig(d) {
             number(d.timing.main, (v) => { d.timing.main = v; })
           ),
         ],
+    h("p", { class: "label", style: "margin-top:16px", text: "Vakaro pabaiga (min.)" }),
+    h("label", { class: "mini inline-row" },
+      h("span", { text: `Uždarantis ratas: ${CLOSING_ROUND.questions.join(" ")}` }),
+      number(roundMinutes(d, CLOSING_ROUND), (v) => { d.timing[CLOSING_ROUND.key] = v; }, 90)
+    ),
     total,
     h("div", { class: "actions" },
       h("button", { class: "secondary", type: "button", text: `← Atgal prie ${veikla ? "veiklų" : "klausimų"}`, onclick: () => setStage("review") }),
@@ -594,7 +636,8 @@ function renderReady(d) {
       : null,
     sectionsFor(d).map(([k, title]) => (d.scenario[k] || []).length
       ? [h("h3", { text: title }), h("ol", {}, d.scenario[k].map((q) => h("li", { class: "plain", text: q })))]
-      : null)
+      : null),
+    closingBlock()
   );
   return [
     h("div", { class: "card ready" },
@@ -719,7 +762,18 @@ function toggleInvite() {
 
 const host = { slides: [], i: 0, elapsed: 0, total: 0, running: true, notified: false, timer: null, audio: null, lock: null, el: {} };
 
+// Jei telefonas buvo priartinęs vaizdą, grąžina normalų mastelį
+function resetZoom() {
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  const meta = document.querySelector('meta[name="viewport"]');
+  if (!meta) return;
+  const original = meta.getAttribute("content");
+  meta.setAttribute("content", `${original}, maximum-scale=1`);
+  setTimeout(() => meta.setAttribute("content", original), 400);
+}
+
 function openHost() {
+  resetZoom();
   const d = state.draft;
   const s = d.scenario;
   const t = d.timing || {};
@@ -746,6 +800,12 @@ function openHost() {
     const list = s[key] || [];
     list.forEach((q, i) => host.slides.push({ label: `${title} · ${i + 1}/${list.length}`, text: q, min: Number(t[key]) || 0 }));
   }
+  host.slides.push({
+    label: "Uždarantis ratas",
+    text: CLOSING_ROUND.questions.join("\n"),
+    sub: "Kiekviena pasisako iš eilės.",
+    min: roundMinutes(d, CLOSING_ROUND),
+  });
   host.i = 0;
   host.total = 0;
   host.running = true;

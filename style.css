@@ -182,11 +182,20 @@ li::before { content: counter(q) "."; color: var(--accent); font-weight: 600; }
 .cat-text { margin: 0 0 6px; font-weight: 600; color: var(--accent); }
 .cat-text::after { content: ""; animation: dots 1.2s steps(4) infinite; }
 @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
-.cat-track { position: relative; height: 10px; border-radius: 99px; background: var(--line); margin: 30px 16px 6px 16px; }
+.cat-track { position: relative; height: 10px; border-radius: 99px; background: var(--line); margin: 40px 30px 6px 30px; }
 .cat-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 99px; background: var(--accent); transition: width .3s linear; }
-.cat { position: absolute; bottom: 4px; left: 0; font-size: 28px; line-height: 1; margin-left: -14px; transition: left .3s linear; animation: run .35s ease-in-out infinite alternate; }
-@keyframes run { from { transform: scaleX(-1) translateY(0) rotate(-4deg); } to { transform: scaleX(-1) translateY(-5px) rotate(4deg); } }
-@media (prefers-reduced-motion: reduce) { .cat { animation: none; transform: scaleX(-1); } }
+.cat { position: absolute; bottom: 5px; left: 0; width: 58px; height: 38px; transform: translateX(-50%); transition: left .3s linear; }
+.cat svg { display: block; overflow: visible; }
+.cat .cat-bob { animation: cat-bob .2s ease-in-out infinite alternate; }
+.cat .leg { transform-box: fill-box; transform-origin: 50% 0; animation: cat-leg .4s ease-in-out infinite alternate; }
+.cat .leg-b { animation-delay: -.4s; }
+.cat .cat-tail { transform-box: fill-box; transform-origin: 100% 100%; animation: cat-tail .4s ease-in-out infinite alternate; }
+.cat .cat-eye { transform-box: fill-box; transform-origin: center; animation: cat-blink 3.5s infinite; }
+@keyframes cat-leg { from { transform: rotate(35deg); } to { transform: rotate(-35deg); } }
+@keyframes cat-bob { from { transform: translateY(0); } to { transform: translateY(-2px); } }
+@keyframes cat-tail { from { transform: rotate(-12deg); } to { transform: rotate(14deg); } }
+@keyframes cat-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
+@media (prefers-reduced-motion: reduce) { .cat .leg, .cat .cat-bob, .cat .cat-tail, .cat .cat-eye { animation: none; } }
 /* Pabaiga */
 .finish { text-align: center; max-width: 520px; margin: 0 auto; }
 .finish-actions { display: grid; gap: 10px; margin-top: 24px; }
@@ -395,3 +404,6 @@ select.host-select, input[type=email] {
   .top, .site-foot, #form, .timing, .actions, #invite, .hint, .swap { display: none !important; }
   #result { margin: 0; }
 }
+
+/* iPhone priartina ekraną, jei laukelio šriftas < 16 px – todėl visur 16 px */
+.mini input, .mini select, .mini textarea, .inline-row input, .host-select { font-size: 16px; }

@@ -50,7 +50,7 @@ function systemPrompt() {
   return [
     "Tu padedi draugių būrelio „Gentis“ vedančiajai pasiruošti susitikimui.",
     "Būrelis renkasi kas dvi savaites 18:30–21:30 (3 valandos) ir kalbasi arba užsiima veiklomis viena iš anksto pasirinkta tema.",
-    "Kiekvienas susitikimas prasideda 3 minučių įsižeminimu ir dviem pasisakymų ratais: „Kaip šiandien jaučiuosi? Kas įvyko nuo praeito susitikimo? Ko tikiuosi iš šiandienos susitikimo?“ ir „Jei dirbčiau vidinį darbą, kokia tema kalbėčiau?“ – nekartok šių klausimų.",
+    "Kiekvienas susitikimas prasideda 3 minučių įsižeminimu ir dviem pasisakymų ratais: „Kaip šiandien jaučiuosi? Kas įvyko nuo praeito susitikimo? Ko tikiuosi iš šiandienos susitikimo?“ ir „Jei dirbčiau vidinį darbą, kokia tema kalbėčiau?“, o baigiasi uždarančiu ratu „Kaip jaučiuosi dabar? Ką išsinešu iš šio susitikimo?“ – nekartok šių klausimų.",
     "Rašai taisyklinga, gyva, šilta lietuvių kalba, kreipiesi į moteris.",
     "Klausimai turi būti atviri (ne taip/ne), konkretūs, skatinantys pasakoti istorijas.",
     "Venk banalybių ir kartojimosi. Kiekvienas klausimas – vienas sakinys, ne ilgesnis nei ~25 žodžiai.",
@@ -69,7 +69,7 @@ ${avoidText}
 Sukurk vakaro scenarijų tokiu JSON formatu:
 {
   "intro": "1–2 sakinių įžanga į temą, kurią vedančioji galėtų perskaityti garsiai",
-  "main": ["klausimai – tiksliai ${count}, nuo lengvesnių link gilesnių; paskutinis gali gražiai užbaigti vakarą"]
+  "main": ["klausimai – tiksliai ${count}, nuo lengvesnių link gilesnių; vakarą užbaigs atskiras uždarantis ratas"]
 }`;
 }
 
@@ -94,8 +94,7 @@ Atsakyk tokiu JSON formatu:
       "minutes": 30,
       "materials": "ko reikės (trumpai, kableliais) arba tuščia eilutė, jei nieko"
     }
-  ],
-  "closing": ["1 užbaigimo klausimas, padedantis pasidalinti, ką kiekviena išsinešė iš veiklų"]
+  ]
 }`;
 }
 
