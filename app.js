@@ -1433,6 +1433,27 @@ async function renderCalendar() {
   drawCalendar();
 }
 
+async function deleteAccount() {
+  const name = state.me.name;
+  const typed = prompt(
+    `Paskyra bus ištrinta visam laikui: vardas, el. paštas, nuotrauka ir pažymėtos dienos.\n` +
+    `Įvykę susitikimai archyve liks.\n\nPatvirtinimui įrašyk savo vardą: ${name}`
+  );
+  if (typed == null) return;
+  if (typed.trim().toLowerCase() !== name.toLowerCase()) {
+    alert("Vardas nesutampa – paskyra neištrinta.");
+    return;
+  }
+  try {
+    await api("/api/auth", { body: { action: "delete" } });
+    ls.set(draftKey(), null);
+    showAuth();
+    alert("Paskyra ištrinta.");
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
 async function logout() {
   try { await api("/api/auth", { body: { action: "logout" } }); } catch (e) {}
   showAuth();
@@ -1612,7 +1633,13 @@ function emailCard(cal) {
 function meetingCard(cal) {
   const m = cal.meeting;
   if (!m) {
+    const nt = cal.nextTopic;
     return h("div", { class: "card meeting empty" },
+      nt && nt.topicState !== "none"
+        ? h("p", { class: "next-topic", text: nt.topicState === "revealed"
+            ? `Kito susitikimo tema: ${nt.topic}${nt.kind === "veikla" ? " (veiklų vakaras)" : ""} · veda ${nt.host}`
+            : `Kito susitikimo tema: 🤫 staigmena · veda ${nt.host}` })
+        : null,
       h("p", { text: "Kitas susitikimas dar nepaskirtas. Pasižymėk, kada gali. Kai pasižymės visos, daugiausiai balsų surinkusi diena patvirtinama automatiškai." })
     );
   }
@@ -1842,6 +1869,7 @@ async function init() {
     $("#suggestions").hidden = true;
   });
   $("#suggest").addEventListener("click", suggestTopics);
+  $("#delete-account").addEventListener("click", deleteAccount);
   $("#topic").addEventListener("input", checkTopicUsed);
 
   try {

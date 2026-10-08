@@ -1,6 +1,6 @@
 // Paprastas service worker: visada bando tinklą (kad būtų naujausia versija),
 // o be ryšio parodo paskutinę išsaugotą puslapio versiją. API užklausos nekešuojamos.
-const CACHE = "gentis-v4";
+const CACHE = "gentis-v5";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));

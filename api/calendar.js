@@ -118,14 +118,33 @@ function autoMeeting(rotation, users, availability, today, absent) {
   return { date: leaders[0], time: START, place: "", host: hostOf(rotation), slot: rotation.next, setBy: "automatiškai", auto: true };
 }
 
-// Ar vedančioji jau suplanavo temą šiam susitikimui ir ar ją paskelbė
-async function withTopic(meeting) {
-  if (!meeting) return meeting;
-  const plan = (await store.archiveItems()).find((i) => i.status === "planned" && i.date === meeting.date);
-  if (!plan) return { ...meeting, topicState: "none" };
+// Vedančiosios suplanuota tema kitam susitikimui (paskelbta ar dar staigmena).
+// Ieško pagal datą, o jei data plane dar neįrašyta – pagal vedančiąją.
+async function upcomingPlan(meeting, host, today) {
+  const plans = (await store.archiveItems()).filter((i) => i.status === "planned" && (!i.date || i.date >= today));
+  if (meeting) {
+    const byDate = plans.find((i) => i.date === meeting.date);
+    if (byDate) return byDate;
+  }
+  return plans.find((i) => !i.date && key(i.host) === key(host)) || null;
+}
+
+function topicInfo(plan) {
+  if (!plan) return { topicState: "none" };
   return plan.revealed
-    ? { ...meeting, topicState: "revealed", topic: plan.topic, kind: plan.kind || "pokalbis" }
-    : { ...meeting, topicState: "secret" };
+    ? { topicState: "revealed", topic: plan.topic, kind: plan.kind || "pokalbis", host: plan.host }
+    : { topicState: "secret", host: plan.host };
+}
+
+async function withTopic(meeting, rotation, today) {
+  const host = meeting ? meeting.host : hostOf(rotation);
+  const info = topicInfo(await upcomingPlan(meeting, host, today));
+  return meeting ? { ...meeting, ...info } : null;
+}
+
+async function nextTopic(meeting, rotation, today) {
+  if (meeting) return null; // rodoma prie susitikimo
+  return topicInfo(await upcomingPlan(null, hostOf(rotation), today));
 }
 
 function view(rotation, users, availability, meeting, user, absent) {
@@ -174,7 +193,7 @@ module.exports = async (req, res) => {
     };
 
     if (req.method === "GET") {
-      return res.status(200).json(view(rotation, users, availability, await withTopic(meeting), user, absent));
+      return res.status(200).json({ ...view(rotation, users, availability, await withTopic(meeting, rotation, today), user, absent), nextTopic: await nextTopic(meeting, rotation, today) });
     }
 
     if (!user) return res.status(401).json({ error: "Prisijunk, kad galėtum žymėti" });
@@ -206,7 +225,10 @@ module.exports = async (req, res) => {
         if (absent.includes(user.id)) absent.splice(absent.indexOf(user.id), 1);
       }
       const { confirmed, emailed } = await tryAutoConfirm();
-      const out = view(rotation, users, availability, await withTopic(confirmed || meeting), user, absent);
+      const out = {
+        ...view(rotation, users, availability, await withTopic(confirmed || meeting, rotation, today), user, absent),
+        nextTopic: await nextTopic(confirmed || meeting, rotation, today),
+      };
       return res.status(200).json({ ...out, autoConfirmed: Boolean(confirmed), emailed });
     }
 

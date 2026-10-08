@@ -90,6 +90,21 @@ module.exports = async (req, res) => {
       return res.status(200).json({ email });
     }
 
+    if (action === "delete") {
+      // Ištrina paskyrą: vardą, slaptažodį, el. paštą, nuotrauką, Google susiejimą ir pažymėtas dienas.
+      // Įvykę susitikimai archyve lieka (kaip bendra būrelio istorija).
+      const me = await auth.sessionUser(req);
+      if (!me) return res.status(401).json({ error: "Prisijunk iš naujo" });
+      const user = store.parse(await store.cmd("HGET", "users", me.id)) || {};
+      if (user.google) await store.cmd("HDEL", "google", user.google);
+      await store.cmd("HDEL", "users", me.id);
+      await store.cmd("HDEL", "avail", me.id);
+      await store.cmd("HDEL", "absent", me.id);
+      const token = auth.tokenFrom(req);
+      if (token) await store.cmd("DEL", `sess:${token}`);
+      return res.status(200).json({ ok: true });
+    }
+
     if (action === "logout") {
       const token = auth.tokenFrom(req);
       if (token) await store.cmd("DEL", `sess:${token}`);

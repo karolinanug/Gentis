@@ -412,3 +412,6 @@ select.host-select, input[type=email] {
 .absent-line { margin: 8px 0; font-size: .9rem; color: var(--muted); }
 .absent-warn { margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: .9rem; font-weight: 500; text-align: center; }
 .meeting .link { margin-top: 8px; display: inline-block; }
+.meeting.empty .next-topic { color: var(--ink); font-weight: 600; margin: 0 0 8px; }
+.site-foot .link { font-size: inherit; color: var(--muted); }
+.site-foot .link.danger:hover { color: var(--error); }
