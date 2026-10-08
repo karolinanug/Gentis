@@ -1,12 +1,136 @@
-// Kito susitikimo kalendorius: kuri narė kada gali + paskirta data.
-//   GET                      – narės, jų laisvos dienos ir paskirtas susitikimas
-//   PUT  {dates: [...]}      – išsaugoti savo laisvas dienas (reikia paskyros)
-//   POST {meeting: {...}}    – paskirti susitikimą (null – atšaukti)
+// Kito susitikimo kalendorius: kuri narė kada gali, vedančiųjų eilė ir paskirta data.
+//   GET                           – narės, jų laisvos dienos, eilė ir paskirtas susitikimas
+//   PUT  {dates: [...]}           – išsaugoti savo laisvas dienas (reikia paskyros).
+//                                   Kai visos eilės narės pasižymi ir viena diena surenka
+//                                   daugiausiai balsų – ji patvirtinama automatiškai.
+//   POST {meeting: {...}}         – paskirti / pakeisti susitikimą (null – atšaukti)
+//   POST {nextHost: "Vardas"}     – pakeisti kito susitikimo vedančiąją, kol data nepaskirta
+//
+// Patvirtinus susitikimą ar pakeitus vedančiąją, jai siunčiamas laiškas (lib/mail.js).
 
 const store = require("../lib/store");
 const { checkAccess } = require("../lib/auth");
+const { mailEnabled, sendMail } = require("../lib/mail");
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const DEFAULT_ORDER = ["Karolina", "Ieva", "Vilma", "Erika", "Dalia"];
+const START = "18:30";
+const END = "21:30";
+
+const key = (name) => String(name || "").trim().toLowerCase();
+
+async function getRotation() {
+  const r = store.parse(await store.cmd("GET", "rotation")) || {};
+  const order = Array.isArray(r.order) && r.order.length ? r.order : DEFAULT_ORDER;
+  return {
+    order,
+    next: Number.isInteger(r.next) ? r.next % order.length : 0,
+    override: r.override || "",
+    lastDate: r.lastDate || "",
+  };
+}
+
+const saveRotation = (r) => store.cmd("SET", "rotation", JSON.stringify(r));
+const hostOf = (r) => r.override || r.order[r.next];
+
+// Praėjęs susitikimas: eilė pasislenka į kitą narę
+async function settle(today) {
+  const rotation = await getRotation();
+  let meeting = store.parse(await store.cmd("GET", "meeting"));
+  if (meeting && meeting.date < today) {
+    const slot = Number.isInteger(meeting.slot) ? meeting.slot : rotation.next;
+    rotation.next = (slot + 1) % rotation.order.length;
+    rotation.override = "";
+    rotation.lastDate = meeting.date;
+    await saveRotation(rotation);
+    await store.cmd("DEL", "meeting");
+    meeting = null;
+  }
+  return { rotation, meeting };
+}
+
+async function loadPeople(today) {
+  const raw = store.toObject(await store.cmd("HGETALL", "users"));
+  const avail = store.toObject(await store.cmd("HGETALL", "avail"));
+  const users = {};
+  for (const [id, json] of Object.entries(raw)) users[id] = store.parse(json) || { name: id };
+  const availability = {};
+  for (const id of Object.keys(users)) {
+    availability[id] = (store.parse(avail[id]) || []).filter((d) => d >= today);
+  }
+  return { users, availability };
+}
+
+function formatDate(date) {
+  const text = new Date(`${date}T12:00:00Z`).toLocaleDateString("lt-LT", {
+    month: "long", day: "numeric", weekday: "long", timeZone: "UTC",
+  });
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+// Laiškas vedančiajai. Grąžina true, jei išsiųsta.
+async function notifyHost(meeting, users, reason) {
+  const host = users[key(meeting.host)];
+  if (!host || !host.email || !mailEnabled()) return false;
+  const lines = [
+    `Sveika, ${host.name}!`,
+    "",
+    reason,
+    "",
+    `📅 ${formatDate(meeting.date)}, ${meeting.time || START}–${END}`,
+    meeting.place ? `📍 ${meeting.place}` : null,
+    "",
+    "Tu esi šio susitikimo vedančioji. Temą ir scenarijų gali paruošti svetainėje.",
+    "",
+    "Genties susitikimas",
+  ].filter((l) => l !== null);
+  try {
+    return await sendMail({
+      to: host.email,
+      subject: `Genties susitikimas: ${formatDate(meeting.date)}`,
+      text: lines.join("\n"),
+    });
+  } catch (err) {
+    console.error("Nepavyko išsiųsti laiško:", err);
+    return false;
+  }
+}
+
+// Kai visos eilės narės pasižymėjo ir viena diena surinko daugiausiai balsų
+function autoMeeting(rotation, users, availability, today) {
+  const voters = rotation.order.map(key);
+  const allVoted = voters.every((id) => users[id] && availability[id].some((d) => d > rotation.lastDate));
+  if (!allVoted) return null;
+  const counts = {};
+  for (const dates of Object.values(availability)) {
+    for (const d of dates) if (d >= today && d > rotation.lastDate) counts[d] = (counts[d] || 0) + 1;
+  }
+  const max = Math.max(0, ...Object.values(counts));
+  const leaders = Object.keys(counts).filter((d) => counts[d] === max);
+  if (!max || leaders.length !== 1) return null;
+  return { date: leaders[0], time: START, place: "", host: hostOf(rotation), slot: rotation.next, setBy: "automatiškai", auto: true };
+}
+
+function view(rotation, users, availability, meeting, user) {
+  const members = Object.entries(users)
+    .map(([id, u]) => ({ id, name: u.name || id }))
+    .sort((a, b) => a.name.localeCompare(b.name, "lt"));
+  return {
+    members,
+    availability,
+    meeting,
+    me: user ? user.id : null,
+    myEmail: user && users[user.id] ? users[user.id].email || "" : "",
+    mailEnabled: mailEnabled(),
+    rotation: {
+      order: rotation.order,
+      next: rotation.next,
+      nextHost: meeting ? meeting.host : hostOf(rotation),
+      lastDate: rotation.lastDate,
+      registered: rotation.order.map((n) => Boolean(users[key(n)])),
+    },
+  };
+}
 
 module.exports = async (req, res) => {
   if (!store.enabled()) return res.status(503).json({ error: store.MISSING });
@@ -16,19 +140,11 @@ module.exports = async (req, res) => {
   const today = store.today();
 
   try {
+    const { rotation, meeting } = await settle(today);
+    const { users, availability } = await loadPeople(today);
+
     if (req.method === "GET") {
-      const users = store.toObject(await store.cmd("HGETALL", "users"));
-      const avail = store.toObject(await store.cmd("HGETALL", "avail"));
-      const members = Object.entries(users)
-        .map(([id, raw]) => ({ id, name: (store.parse(raw) || {}).name || id }))
-        .sort((a, b) => a.name.localeCompare(b.name, "lt"));
-      const availability = {};
-      for (const m of members) {
-        availability[m.id] = (store.parse(avail[m.id]) || []).filter((d) => d >= today);
-      }
-      let meeting = store.parse(await store.cmd("GET", "meeting"));
-      if (meeting && meeting.date < today) meeting = null;
-      return res.status(200).json({ members, availability, meeting, me: user ? user.id : null });
+      return res.status(200).json(view(rotation, users, availability, meeting, user));
     }
 
     if (!user) return res.status(401).json({ error: "Prisijunk, kad galėtum žymėti" });
@@ -39,7 +155,25 @@ module.exports = async (req, res) => {
         .sort()
         .slice(0, 200);
       await store.cmd("HSET", "avail", user.id, JSON.stringify(clean));
-      return res.status(200).json({ dates: clean });
+      availability[user.id] = clean;
+
+      let confirmed = null;
+      let emailed = false;
+      if (!meeting) {
+        confirmed = autoMeeting(rotation, users, availability, today);
+        if (confirmed) {
+          await store.cmd("SET", "meeting", JSON.stringify(confirmed));
+          emailed = await notifyHost(confirmed, users, "Visos narės pasižymėjo, ir kito susitikimo data patvirtinta automatiškai.");
+        }
+      }
+      return res.status(200).json({ dates: clean, meeting: confirmed || meeting, autoConfirmed: Boolean(confirmed), emailed });
+    }
+
+    if (req.method === "POST" && req.body && "nextHost" in req.body) {
+      const name = String(req.body.nextHost || "").trim().slice(0, 40);
+      rotation.override = name && key(name) !== key(rotation.order[rotation.next]) ? name : "";
+      await saveRotation(rotation);
+      return res.status(200).json(view(rotation, users, availability, meeting, user));
     }
 
     if (req.method === "POST") {
@@ -51,14 +185,27 @@ module.exports = async (req, res) => {
       if (!DATE.test(m.date || "") || m.date < today) {
         return res.status(400).json({ error: "Pasirink būsimą datą" });
       }
-      const meeting = {
+      const host = typeof m.host === "string" && m.host.trim() ? m.host.trim().slice(0, 40) : (meeting ? meeting.host : hostOf(rotation));
+      const next = {
         date: m.date,
-        time: /^\d{2}:\d{2}$/.test(m.time || "") ? m.time : "",
+        time: /^\d{2}:\d{2}$/.test(m.time || "") ? m.time : START,
         place: typeof m.place === "string" ? m.place.trim().slice(0, 120) : "",
+        host,
+        slot: meeting && Number.isInteger(meeting.slot) ? meeting.slot : rotation.next,
         setBy: user.name,
       };
-      await store.cmd("SET", "meeting", JSON.stringify(meeting));
-      return res.status(200).json({ meeting });
+      await store.cmd("SET", "meeting", JSON.stringify(next));
+
+      let emailed = false;
+      if (!meeting) {
+        emailed = await notifyHost(next, users, "Kito susitikimo data paskirta.");
+      } else if (key(meeting.host) !== key(next.host)) {
+        const who = key(user.name) === key(meeting.host) ? `${meeting.host} negalės vesti` : `${user.name} pakeitė vedančiąją`;
+        emailed = await notifyHost(next, users, `${who} – šį susitikimą vietoj ${meeting.host} vesi tu.`);
+      } else if (meeting.date !== next.date || meeting.time !== next.time || meeting.place !== next.place) {
+        emailed = await notifyHost(next, users, "Susitikimo informacija atnaujinta.");
+      }
+      return res.status(200).json({ meeting: next, emailed });
     }
 
     return res.status(405).json({ error: "Netinkamas metodas" });

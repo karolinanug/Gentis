@@ -1163,8 +1163,16 @@ function scheduleSave() {
   setCalStatus("Saugoma…");
   saveTimer = setTimeout(async () => {
     try {
-      await api("/api/calendar", { method: "PUT", body: { dates: state.calendar.availability[state.me.id] || [] } });
-      setCalStatus("Išsaugota ✓");
+      const r = await api("/api/calendar", { method: "PUT", body: { dates: state.calendar.availability[state.me.id] || [] } });
+      if (r.autoConfirmed) {
+        state.calendar.meeting = r.meeting;
+        state.meeting = r.meeting;
+        state.calStatus = `🎉 Visos pasižymėjo – data patvirtinta automatiškai: ${fmtDate(r.meeting.date)}.` +
+          (r.emailed ? ` Vedančiajai ${r.meeting.host} išsiųstas laiškas.` : "");
+        drawCalendar();
+      } else {
+        setCalStatus("Išsaugota ✓");
+      }
     } catch (e) {
       setCalStatus(e.message, true);
     }
@@ -1176,30 +1184,106 @@ async function setMeeting(meeting) {
     const r = await api("/api/calendar", { body: { meeting } });
     state.calendar.meeting = r.meeting;
     state.meeting = r.meeting;
+    if (r.meeting) state.calendar.rotation.nextHost = r.meeting.host;
+    state.calStatus = r.emailed ? `Vedančiajai ${r.meeting.host} išsiųstas laiškas ✉` : "";
     drawCalendar();
   } catch (e) {
     alert(e.message);
   }
 }
 
+async function setNextHost(name) {
+  try {
+    const r = await api("/api/calendar", { body: { nextHost: name } });
+    state.calendar = r;
+    drawCalendar();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+// Vedančiosios pasirinkimas: eilės narės + kitos užsiregistravusios
+function hostSelect(cal, current, onChange) {
+  const names = [...cal.rotation.order];
+  for (const m of cal.members) if (!names.some((n) => n.toLowerCase() === m.name.toLowerCase())) names.push(m.name);
+  const select = h("select", { class: "host-select", "aria-label": "Vedančioji" },
+    names.map((n) => h("option", { value: n, selected: n.toLowerCase() === String(current).toLowerCase(), text: n }))
+  );
+  select.onchange = () => onChange(select.value);
+  return select;
+}
+
+function rotationCard(cal) {
+  const r = cal.rotation;
+  const scheduled = r.order[r.next];
+  const host = r.nextHost;
+  const swapped = host && host.toLowerCase() !== scheduled.toLowerCase();
+  return h("div", { class: "card" },
+    h("h2", { text: "Vedančiųjų eilė" }),
+    h("ol", { class: "rotation" }, r.order.map((name, i) =>
+      h("li", { class: [i === r.next && "current", !r.registered[i] && "unregistered"].filter(Boolean).join(" ") },
+        h("span", { text: name }),
+        i === r.next ? h("small", { text: swapped ? `vietoj jos veda ${host}` : "veda kitą" }) : null,
+        !r.registered[i] ? h("small", { text: "neturi paskyros" }) : null
+      )
+    )),
+    h("div", { class: "row", style: "margin-top:14px;align-items:end" },
+      h("label", { class: "mini" }, "Kitą susitikimą veda",
+        hostSelect(cal, host, (name) => {
+          if (cal.meeting) {
+            if (confirm(`Pakeisti vedančiąją į ${name}? Jai bus išsiųstas laiškas.`)) setMeeting({ ...cal.meeting, host: name });
+            else drawCalendar();
+          } else {
+            setNextHost(name);
+          }
+        })
+      )
+    ),
+    h("p", { class: "hint", text: "Jei vedančioji negali – pasirink kitą narę. Po susitikimo eilė eina toliau." })
+  );
+}
+
+function emailCard(cal) {
+  const input = h("input", { type: "email", value: cal.myEmail || "", placeholder: "vardas@gmail.com", autocomplete: "email" });
+  const note = h("p", { class: "hint" });
+  const save = h("button", { class: "secondary small", type: "button", text: "Išsaugoti" });
+  save.onclick = async () => {
+    try {
+      const r = await api("/api/auth", { body: { action: "set-email", email: input.value } });
+      cal.myEmail = r.email;
+      note.textContent = "Išsaugota ✓";
+    } catch (e) {
+      note.textContent = e.message;
+    }
+  };
+  return h("div", { class: "card" },
+    h("h2", { text: "Pranešimai el. paštu" }),
+    h("p", { class: "hint", style: "margin:0 0 12px", text: "Kai būsi vedančioji, čia gausi laišką su patvirtinta susitikimo data." }),
+    h("div", { class: "row", style: "align-items:end" }, h("label", { class: "mini" }, "Tavo el. paštas", input), h("div", { style: "flex:0 0 auto" }, save)),
+    note,
+    cal.mailEnabled ? null : h("p", { class: "hint", text: "(Laiškų siuntimas dar neįjungtas serveryje.)" })
+  );
+}
+
 function meetingCard(cal) {
   const m = cal.meeting;
   if (!m) {
     return h("div", { class: "card meeting empty" },
-      h("p", { text: "Kitas susitikimas dar nepaskirtas. Pasižymėk, kada gali, o žemiau pamatysi dienas, kurios tinka daugumai." })
+      h("p", { text: "Kitas susitikimas dar nepaskirtas. Pasižymėk, kada gali. Kai pasižymės visos, daugiausiai balsų surinkusi diena patvirtinama automatiškai." })
     );
   }
-  const time = h("input", { type: "time", value: m.time || "" });
+  const time = h("input", { type: "time", value: m.time || MEETING_START });
   const place = h("input", { type: "text", value: m.place || "", placeholder: "pvz., pas Rūtą" });
   return h("div", { class: "card meeting" },
     h("p", { class: "label", text: "Kitas susitikimas" }),
-    h("p", { class: "big", text: fmtDate(m.date) }),
-    h("div", { class: "row" }, h("label", { class: "mini" }, "Laikas", time), h("label", { class: "mini" }, "Vieta", place)),
+    h("p", { class: "big", text: `${fmtDate(m.date)}, ${m.time || MEETING_START}–${endTime(m.time || MEETING_START)}` }),
+    h("p", { style: "margin:0 0 12px", text: `Veda: ${m.host || "—"}` }),
+    h("div", { class: "row" }, h("label", { class: "mini" }, "Pradžia", time), h("label", { class: "mini" }, "Vieta", place)),
     h("div", { class: "actions" },
       h("button", { class: "secondary small", type: "button", text: "Išsaugoti", onclick: () => setMeeting({ ...m, time: time.value, place: place.value }) }),
       h("button", { class: "secondary small", type: "button", text: "Atšaukti susitikimą", onclick: () => confirm("Atšaukti paskirtą susitikimą?") && setMeeting(null) })
     ),
-    m.setBy ? h("p", { class: "hint", text: `Paskyrė ${m.setBy}` }) : null
+    m.setBy ? h("p", { class: "hint", text: m.auto ? "Patvirtinta automatiškai pagal balsus" : `Paskyrė ${m.setBy}` }) : null
   );
 }
 
@@ -1210,10 +1294,11 @@ function drawCalendar() {
   const members = cal.members;
   const nameOf = (id) => (members.find((m) => m.id === id) || {}).name || id;
   const mine = new Set(cal.availability[meId] || []);
+  const after = cal.rotation.lastDate || "";
 
   const byDate = {};
   for (const [id, dates] of Object.entries(cal.availability)) {
-    for (const d of dates) (byDate[d] = byDate[d] || []).push(id);
+    for (const d of dates) if (d > after) (byDate[d] = byDate[d] || []).push(id);
   }
 
   const start = new Date();
@@ -1229,6 +1314,7 @@ function drawCalendar() {
   const toggle = (iso) => {
     if (mine.has(iso)) mine.delete(iso); else mine.add(iso);
     cal.availability[meId] = [...mine].sort();
+    state.calStatus = "";
     drawCalendar();
     scheduleSave();
   };
@@ -1259,13 +1345,24 @@ function drawCalendar() {
     .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
     .slice(0, 5);
 
-  const missing = members.filter((m) => !(cal.availability[m.id] || []).length).map((m) => m.name);
+  // Balsavimo būsena pagal eilės nares
+  const voted = (name) => (cal.availability[name.toLowerCase()] || []).some((d) => d > after);
+  const order = cal.rotation.order;
+  const missing = order.filter((n) => !voted(n));
+  const tie = ranked.length > 1 && ranked[0][1].length === ranked[1][1].length;
+  const voteNote = cal.meeting
+    ? null
+    : missing.length
+      ? `Pasižymėjo ${order.length - missing.length} iš ${order.length}. Dar laukiama: ${missing.join(", ")}.`
+      : tie
+        ? "Visos pasižymėjo, bet kelios dienos surinko po lygiai balsų – paskirkite vieną iš jų ranka."
+        : null;
 
-  $("#tab-kalendorius").replaceChildren(
+  $("#tab-kalendorius").replaceChildren(...[
     meetingCard(cal),
     h("div", { class: "card" },
       h("h2", { text: "Kada gali?" }),
-      h("p", { class: "hint", style: "margin:0 0 12px", text: "Spustelk dienas, kai gali ateiti. Skaičius rodo, kiek narių tą dieną gali." }),
+      h("p", { class: "hint", style: "margin:0 0 12px", text: `Spustelk dienas, kai gali ateiti (${MEETING_START}–${endTime(MEETING_START)}). Skaičius rodo, kiek narių tą dieną gali.` }),
       h("div", { class: "cal" },
         ["Pr", "An", "Tr", "Kt", "Pn", "Še", "Sk"].map((w) => h("span", { class: "wd", text: w })),
         cells
@@ -1279,6 +1376,7 @@ function drawCalendar() {
     ),
     h("div", { class: "card" },
       h("h2", { text: "Geriausios dienos" }),
+      voteNote ? h("p", { class: "hint", style: "margin:0 0 10px", text: voteNote }) : null,
       ranked.length
         ? h("ol", { class: "best-list" }, ranked.map(([d, ids]) =>
             h("li", {},
@@ -1296,10 +1394,11 @@ function drawCalendar() {
                   })
             )
           ))
-        : h("p", { class: "hint", style: "margin:0", text: "Dar niekas nepasižymėjo." }),
-      missing.length ? h("p", { class: "hint", style: "margin-top:14px", text: `Dar nepasižymėjo: ${missing.join(", ")}` }) : null
-    )
-  );
+        : h("p", { class: "hint", style: "margin:0", text: "Dar niekas nepasižymėjo." })
+    ),
+    rotationCard(cal),
+    emailCard(cal),
+  ].filter(Boolean));
 }
 
 // ---------- Prisijungimas / programa ----------

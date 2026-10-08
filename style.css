@@ -218,6 +218,23 @@ li::before { content: counter(q) "."; color: var(--accent); font-weight: 600; }
 .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 4px; vertical-align: -1px; margin-right: 4px; border: 1px solid var(--line); }
 .legend .l-mine { background: var(--accent); border-color: var(--accent); }
 .legend .l-best { box-shadow: inset 0 0 0 2px var(--ok); }
+.rotation { counter-reset: none; }
+.rotation li { grid-template-columns: 1fr auto; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 6px; align-items: center; }
+.rotation li::before { content: none; }
+.rotation li small { color: var(--muted); font-size: .8rem; }
+.rotation li.current { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.rotation li.current small { color: var(--accent); }
+.rotation li.unregistered span { color: var(--muted); }
+select.host-select, input[type=email] {
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  margin-top: 4px;
+}
 .best-list li { grid-template-columns: 1fr auto; align-items: center; }
 .best-list li::before { content: none; }
 .best-list strong { }

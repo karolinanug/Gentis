@@ -72,6 +72,19 @@ module.exports = async (req, res) => {
       return res.status(200).json({ user });
     }
 
+    if (action === "set-email") {
+      const me = await auth.sessionUser(req);
+      if (!me) return res.status(401).json({ error: "Prisijunk iš naujo" });
+      const email = typeof req.body.email === "string" ? req.body.email.trim().slice(0, 120) : "";
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: "Neteisingas el. pašto adresas" });
+      }
+      const user = store.parse(await store.cmd("HGET", "users", me.id)) || { name: me.name };
+      user.email = email;
+      await store.cmd("HSET", "users", me.id, JSON.stringify(user));
+      return res.status(200).json({ email });
+    }
+
     if (action === "logout") {
       const token = auth.tokenFrom(req);
       if (token) await store.cmd("DEL", `sess:${token}`);
