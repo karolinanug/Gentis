@@ -84,7 +84,7 @@ module.exports = async (req, res) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 1200,
+        max_tokens: 3000,
         system: systemPrompt(),
         messages: [{ role: "user", content: userContent }],
       }),
@@ -97,7 +97,12 @@ module.exports = async (req, res) => {
     }
 
     const text = (data.content || []).map((b) => b.text || "").join("");
-    return res.status(200).json(parseJson(text));
+    try {
+      return res.status(200).json(parseJson(text));
+    } catch (parseErr) {
+      console.error("Nepavyko perskaityti JSON. stop_reason:", data.stop_reason, "Tekstas:", text);
+      return res.status(502).json({ error: "AI atsakymas netinkamo formato, pabandyk dar kartą" });
+    }
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Nepavyko sugeneruoti, pabandyk dar kartą" });
