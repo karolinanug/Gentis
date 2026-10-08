@@ -1,5 +1,7 @@
 // Buvusių susitikimų archyvas.
-//   GET              – visi įrašai
+// Būsimo susitikimo tema – staigmena: ją mato tik išsaugojusi narė,
+// kitoms ji atsiveria kitą dieną po susitikimo.
+//   GET              – visi įrašai (būsimų svetimų – be temos ir klausimų)
 //   POST {entry}     – išsaugoti naują arba atnaujinti (jei yra entry.id)
 //   DELETE ?id=...   – ištrinti
 
@@ -15,6 +17,20 @@ function cleanList(list) {
     : [];
 }
 
+function isOwner(item, user) {
+  if (!user) return false;
+  if (item.hostId) return item.hostId === user.id;
+  return Boolean(item.host) && item.host.toLowerCase() === user.name.toLowerCase();
+}
+
+function isVisible(item, user, today) {
+  return (item.date || "") < today || isOwner(item, user);
+}
+
+function masked(item) {
+  return { id: item.id, date: item.date, host: item.host, hidden: true };
+}
+
 module.exports = async (req, res) => {
   if (!store.enabled()) return res.status(503).json({ error: store.MISSING });
   const access = await checkAccess(req);
@@ -22,7 +38,8 @@ module.exports = async (req, res) => {
 
   try {
     if (req.method === "GET") {
-      const items = await store.archiveItems();
+      const today = store.today();
+      const items = (await store.archiveItems()).map((i) => (isVisible(i, access.user, today) ? i : masked(i)));
       items.sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.savedAt || 0) - (a.savedAt || 0));
       return res.status(200).json({ items });
     }
@@ -37,6 +54,9 @@ module.exports = async (req, res) => {
         ? entry.id
         : crypto.randomBytes(8).toString("hex");
       const old = store.parse(await store.cmd("HGET", "archive", id));
+      if (old && !isVisible(old, access.user, store.today())) {
+        return res.status(403).json({ error: "Šį susitikimą ruošia kita narė" });
+      }
       const t = entry.timing || {};
       const item = {
         id,
@@ -56,6 +76,7 @@ module.exports = async (req, res) => {
           closing: Math.min(60, Math.max(0, Number(t.closing) || 0)),
         },
         host: (old && old.host) || (access.user && access.user.name) || "",
+        hostId: (old && old.hostId) || (access.user && access.user.id) || "",
         savedAt: Date.now(),
       };
       await store.cmd("HSET", "archive", id, JSON.stringify(item));
@@ -65,6 +86,10 @@ module.exports = async (req, res) => {
     if (req.method === "DELETE") {
       const id = String((req.query && req.query.id) || "");
       if (!/^[a-f0-9]{16}$/.test(id)) return res.status(400).json({ error: "Blogas įrašo ID" });
+      const item = store.parse(await store.cmd("HGET", "archive", id));
+      if (item && !isVisible(item, access.user, store.today())) {
+        return res.status(403).json({ error: "Šį susitikimą ruošia kita narė" });
+      }
       await store.cmd("HDEL", "archive", id);
       return res.status(200).json({ ok: true });
     }

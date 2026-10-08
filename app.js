@@ -147,7 +147,7 @@ function rememberCode() {
 function checkTopicUsed() {
   const note = $("#topic-note");
   const topic = $("#topic").value.trim().toLowerCase();
-  const used = topic && (state.archive || []).filter((i) => i.topic.trim().toLowerCase() === topic);
+  const used = topic && (state.archive || []).filter((i) => i.topic && i.topic.trim().toLowerCase() === topic);
   if (used && used.length) {
     note.textContent = `Šia tema jau kalbėjotės: ${used.map((i) => fmtDate(i.date)).join("; ")}. Klausimai nesikartos.`;
     note.hidden = false;
@@ -642,6 +642,14 @@ async function renderArchive() {
 }
 
 function archiveCard(item) {
+  if (item.hidden) {
+    return h("article", { class: "card item secret" },
+      h("p", { class: "date", text: fmtDate(item.date) }),
+      h("h3", { text: "🤫 Tema – staigmena" }),
+      h("p", { class: "hint", text: `${item.host ? `Veda ${item.host}. ` : ""}Tema ir klausimai atsivers po susitikimo.` })
+    );
+  }
+  const upcoming = item.date >= today();
   const depth = (DEPTHS.find(([v]) => v === item.depth) || [])[1];
   const details = h("div", { class: "details", hidden: true },
     item.scenario.intro ? h("p", { class: "hint", style: "font-style:italic", text: item.scenario.intro }) : null,
@@ -658,7 +666,7 @@ function archiveCard(item) {
   return h("article", { class: "card item" },
     h("p", { class: "date", text: fmtDate(item.date) }),
     h("h3", { text: item.topic }),
-    h("p", { class: "hint", text: [depth, item.host && `išsaugojo ${item.host}`].filter(Boolean).join(" · ") }),
+    h("p", { class: "hint", text: [depth, item.host && `išsaugojo ${item.host}`, upcoming && "🤫 kitoms dar paslaptis"].filter(Boolean).join(" · ") }),
     details,
     h("div", { class: "actions" },
       toggle,

@@ -154,6 +154,7 @@ li::before { content: counter(q) "."; color: var(--accent); font-weight: 600; }
 
 /* Archyvas */
 .item .date { color: var(--accent); font-weight: 600; font-size: .85rem; margin: 0 0 2px; }
+.item.secret { border-style: dashed; }
 .item .details h3 { font-size: 1rem; margin: 16px 0 4px; }
 
 /* Kalendorius */
