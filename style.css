@@ -152,14 +152,14 @@ li::before { content: counter(q) "."; color: var(--accent); font-weight: 600; }
 .swap:hover { color: var(--accent); border-color: var(--accent); }
 .timing { margin-top: 28px; }
 /* Eiga */
-.stepper { display: flex; gap: 6px; list-style: none; padding: 0; margin: 0 0 18px; counter-reset: none; }
-.stepper li { display: flex; align-items: center; gap: 6px; border: 0; padding: 0; color: var(--muted); font-size: .85rem; flex: 1; grid-template-columns: none; }
-.stepper li::before { content: none; }
-.stepper li + li::before { content: ""; display: block; flex: 0 0 14px; height: 2px; background: var(--line); margin-right: 2px; }
+.stepper { display: flex; align-items: center; margin: 0 0 18px; }
+.step { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: .85rem; flex: none; }
+.step-line { flex: 1 1 auto; min-width: 12px; height: 2px; margin: 0 8px; background: var(--line); border-radius: 2px; }
+.step-line.done { background: var(--accent-soft); }
 .step-dot { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--line); display: inline-flex; align-items: center; justify-content: center; font-size: .72rem; font-weight: 700; flex: none; }
-.stepper li.now { color: var(--ink); font-weight: 600; }
-.stepper li.now .step-dot { background: var(--accent); border-color: var(--accent); color: #fff; }
-.stepper li.done .step-dot { background: var(--accent-soft); border-color: var(--accent-soft); color: var(--accent); }
+.step.now { color: var(--ink); font-weight: 600; }
+.step.now .step-dot { background: var(--accent); border-color: var(--accent); color: #fff; }
+.step.done .step-dot { background: var(--accent-soft); border-color: var(--accent-soft); color: var(--accent); }
 .meeting-line { font-weight: 500; margin: 0; }
 .inline-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); margin: 0; }
 .inline-row input { width: 80px; margin: 0; padding: 6px 8px; }
@@ -447,3 +447,5 @@ select.host-select, input[type=email] {
 .add-cal { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 14px 0 4px; padding-top: 12px; border-top: 1px solid var(--line); }
 .add-cal-label { font-size: .88rem; color: var(--muted); width: 100%; }
 .btn-link { display: inline-flex; align-items: center; text-decoration: none; color: var(--ink); border-radius: 10px; font-weight: 600; }
+.meeting-foot { margin-top: 10px; }
+.meeting-foot .link { font-size: inherit; color: var(--muted); text-decoration: underline; }
