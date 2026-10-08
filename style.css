@@ -158,6 +158,8 @@ li::before { content: counter(q) "."; color: var(--accent); font-weight: 600; }
 
 /* Kalendorius */
 .who { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 16px; color: var(--muted); }
+.who-links { display: flex; gap: 14px; }
+.google-btn { min-height: 44px; }
 .meeting .big { font-family: Lora, Georgia, serif; font-size: 1.3rem; font-weight: 600; margin: 0 0 12px; }
 .meeting.empty p { margin: 0; color: var(--muted); }
 .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }

@@ -66,6 +66,7 @@ const state = {
   calendar: null,
   meeting: null,
   calStatus: "",
+  googleClientId: null,
 };
 
 function saveDraft() {
@@ -698,6 +699,78 @@ function setSession(token, user) {
   updateCodeField();
 }
 
+// Google „Sign in with Google“ mygtukas. Skriptas įkeliamas tik kai reikia.
+let googleScript = null;
+let googleHandler = null;
+function loadGoogle() {
+  if (!googleScript) {
+    googleScript = new Promise((resolve, reject) => {
+      const tag = h("script", { src: "https://accounts.google.com/gsi/client", async: true });
+      tag.onload = () => {
+        window.google.accounts.id.initialize({
+          client_id: state.googleClientId,
+          callback: (r) => googleHandler && googleHandler(r.credential),
+        });
+        resolve(window.google);
+      };
+      tag.onerror = () => { googleScript = null; reject(new Error("Nepavyko įkelti Google prisijungimo")); };
+      document.head.append(tag);
+    });
+  }
+  return googleScript;
+}
+
+function googleButton(onCredential, onError) {
+  const box = h("div", { class: "google-btn" });
+  loadGoogle()
+    .then((google) => {
+      googleHandler = onCredential;
+      google.accounts.id.renderButton(box, {
+        theme: matchMedia("(prefers-color-scheme: dark)").matches ? "filled_black" : "outline",
+        size: "large",
+        shape: "pill",
+        text: "continue_with",
+        locale: "lt",
+      });
+    })
+    .catch(onError);
+  return box;
+}
+
+function googleCard(fail) {
+  const card = h("div", { class: "card" }, h("h2", { text: "Greičiausia – su Google" }));
+  const onCredential = async (credential) => {
+    try {
+      const r = await api("/api/auth", { body: { action: "google", credential } });
+      if (r.token) { setSession(r.token, r.user); renderCalendar(); return; }
+      if (r.needsSignup) showSignup(credential, r.suggestedName);
+    } catch (x) { fail(x); }
+  };
+  const showSignup = (credential, suggested) => {
+    const name = h("input", { type: "text", required: true, maxlength: "40", value: suggested || "" });
+    const code = h("input", { type: "password", required: true, value: state.code });
+    const form = h("form", {},
+      h("p", { class: "hint", style: "margin:0 0 12px", text: "Pirmas kartas – dar trūksta dviejų dalykų:" }),
+      h("label", { class: "mini" }, "Vardas (taip tave matys kitos)", name),
+      h("label", { class: "mini", style: "margin-top:10px" }, "Būrelio kodas", code),
+      h("div", { class: "actions" }, h("button", { class: "primary small", type: "submit", text: "Baigti registraciją" }))
+    );
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      try {
+        const r = await api("/api/auth", { body: { action: "google", credential, name: name.value, code: code.value.trim() } });
+        state.code = code.value.trim();
+        ls.set("burelioKodas", state.code);
+        setSession(r.token, r.user);
+        renderCalendar();
+      } catch (x) { fail(x); }
+    };
+    card.replaceChildren(h("h2", { text: "Sveika!" }), form);
+  };
+  card.append(googleButton(onCredential, fail));
+  return card;
+}
+
 function renderAuth(root) {
   const err = h("p", { class: "error", hidden: true });
   const fail = (e) => { err.textContent = e.message; err.hidden = false; };
@@ -742,12 +815,14 @@ function renderAuth(root) {
     } catch (x) { fail(x); }
   };
 
-  root.replaceChildren(
+  root.replaceChildren(...[
     h("p", { class: "hint", style: "margin:0 0 16px", text: "Kalendoriui reikia paskyros – taip matysime, kuri narė kada gali." }),
     err,
+    state.googleClientId ? googleCard(fail) : null,
+    state.googleClientId ? h("p", { class: "hint", style: "margin:0 0 16px", text: "Arba su vardu ir slaptažodžiu:" }) : null,
     login,
-    register
-  );
+    register,
+  ].filter(Boolean));
 }
 
 // ---------- Kalendorius ----------
@@ -775,6 +850,27 @@ async function logout() {
   try { await api("/api/auth", { body: { action: "logout" } }); } catch (e) {}
   setSession(null, null);
   renderCalendar();
+}
+
+function showLinkGoogle() {
+  const box = $("#link-google");
+  if (box.childElementCount) { box.replaceChildren(); return; }
+  const err = h("p", { class: "error", hidden: true });
+  const fail = (e) => { err.textContent = e.message; err.hidden = false; };
+  box.replaceChildren(
+    h("div", { class: "card" },
+      h("p", { class: "hint", style: "margin:0 0 12px", text: "Susiejus kitą kartą galėsi prisijungti vienu paspaudimu." }),
+      googleButton(async (credential) => {
+        try {
+          const r = await api("/api/auth", { body: { action: "link-google", credential } });
+          state.me = r.user;
+          drawCalendar();
+          setCalStatus("Google paskyra susieta ✓");
+        } catch (x) { fail(x); }
+      }, fail),
+      err
+    )
+  );
 }
 
 let saveTimer = null;
@@ -889,8 +985,14 @@ function drawCalendar() {
   $("#tab-kalendorius").replaceChildren(
     h("div", { class: "who" },
       h("span", { text: `Prisijungusi: ${state.me.name}` }),
-      h("button", { class: "link", type: "button", text: "Atsijungti", onclick: logout })
+      h("span", { class: "who-links" },
+        state.googleClientId && !state.me.google
+          ? h("button", { class: "link", type: "button", text: "Susieti su Google", onclick: showLinkGoogle })
+          : null,
+        h("button", { class: "link", type: "button", text: "Atsijungti", onclick: logout })
+      )
     ),
+    h("div", { id: "link-google" }),
     meetingCard(cal),
     h("div", { class: "card" },
       h("h2", { text: "Kada gali?" }),
@@ -940,6 +1042,10 @@ async function init() {
   $("#form").addEventListener("submit", generate);
   $("#suggest").addEventListener("click", suggestTopics);
   $("#topic").addEventListener("input", checkTopicUsed);
+
+  try {
+    state.googleClientId = (await api("/api/auth", { body: { action: "config" } })).googleClientId;
+  } catch (e) {}
 
   if (state.token) {
     try {
