@@ -264,7 +264,8 @@ li::before { content: counter(q) "."; color: var(--accent); font-weight: 600; }
 .day.mine .dots i { background: #fff; }
 .day.mine .dots-n { color: #fff; }
 .day.meeting { box-shadow: inset 0 0 0 2px var(--ink); }
-.day.meeting::after { content: "★"; position: absolute; top: 3px; right: 5px; font-size: .6rem; }
+.day.meeting::after { content: ""; position: absolute; top: 5px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
+.day.mine.meeting::after { background: #fff; }
 .day:disabled { opacity: .3; cursor: default; }
 .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); margin: 10px 0 0; }
 .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 4px; vertical-align: -1px; margin-right: 4px; border: 1px solid var(--line); }
@@ -432,3 +433,17 @@ select.host-select, input[type=email] {
 .nb-label { font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
 .nb-topic { font-family: Lora, Georgia, serif; font-size: 1.2rem; font-weight: 600; }
 .nb-meta { font-size: .88rem; color: var(--muted); }
+/* Ikonėlės */
+.icon { display: inline-flex; width: 1.15em; height: 1.15em; vertical-align: -0.2em; margin-right: .4em; flex: none; }
+.icon svg { width: 100%; height: 100%; }
+.icon.after { margin-right: 0; margin-left: .4em; }
+.icon.solo { margin: 0; width: 1.25em; height: 1.25em; }
+.icon.accent { color: var(--accent); }
+.host-q .icon { margin: 0 0 0 .2em; }
+.step-dot .icon { margin: 0; width: 14px; height: 14px; }
+.legend .l-meet { box-shadow: inset 0 0 0 2px var(--ink); }
+.notice .icon { margin-right: .5em; }
+.host-close { display: inline-flex; align-items: center; justify-content: center; }
+.add-cal { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 14px 0 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+.add-cal-label { font-size: .88rem; color: var(--muted); width: 100%; }
+.btn-link { display: inline-flex; align-items: center; text-decoration: none; color: var(--ink); border-radius: 10px; font-weight: 600; }

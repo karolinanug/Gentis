@@ -31,6 +31,36 @@ function avatar(name, picture, size = 36) {
   return el;
 }
 
+// Nupieštos ikonėlės (vietoj emoji). Linijos – currentColor, todėl tinka abiem temoms.
+const ICONS = {
+  chat: '<path d="M4 5h16v11H9l-5 4z"/>',
+  palette: '<path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-1 1.6-2.1-.5-1.3.3-2.6 1.7-2.6H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3z"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor"/><circle cx="10.5" cy="7.5" r="1.2" fill="currentColor"/><circle cx="15" cy="7.8" r="1.2" fill="currentColor"/>',
+  sparkle: '<path d="M12 3c.6 4.2 2.8 6.4 7 7-4.2.6-6.4 2.8-7 7-.6-4.2-2.8-6.4-7-7 4.2-.6 6.4-2.8 7-7z"/><path d="M19 15.5c.2 1.4.9 2.1 2.3 2.3-1.4.2-2.1.9-2.3 2.3-.2-1.4-.9-2.1-2.3-2.3 1.4-.2 2.1-.9 2.3-2.3z"/>',
+  calendar: '<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  secret: '<path d="M3 11c2.5 3 5.5 4.5 9 4.5s6.5-1.5 9-4.5"/><path d="M6 14l-1.5 2.5M10 15.3l-.5 2.7M14 15.3l.5 2.7M18 14l1.5 2.5"/>',
+  megaphone: '<path d="M4 10v4h3l8 4V6L7 10z"/><path d="M18 9.5a3.5 3.5 0 0 1 0 5M7 14l1.5 5h2.5l-1-4.5"/>',
+  play: '<path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/>',
+  mail: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M4 7l8 6 8-6"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  pencil: '<path d="M15.5 4.5l4 4L9 19H5v-4z"/><path d="M13.5 6.5l4 4"/>',
+  heart: '<path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.3 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z" fill="currentColor"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  "arrow-left": '<path d="M19 12H5M11 6l-6 6 6 6"/>',
+  "arrow-right": '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
+  "bell-off": '<path d="M6 16V11a6 6 0 0 1 9.5-4.9M18 11v5l1.5 2H8"/><path d="M10 20.5a2 2 0 0 0 4 0M4 4l16 16"/>',
+  warning: '<path d="M12 4l9 16H3z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.3" r=".9" fill="currentColor"/>',
+  "calendar-plus": '<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4M12 13v5M9.5 15.5h5"/>',
+  "user-x": '<circle cx="10" cy="8" r="3.5"/><path d="M3.5 20c.6-3.8 3.2-6 6.5-6 1.5 0 2.8.4 3.9 1.2M16 15l5 5M21 15l-5 5"/>',
+};
+function icon(name, cls = "") {
+  const el = document.createElement("span");
+  el.className = `icon ${cls}`.trim();
+  el.setAttribute("aria-hidden", "true");
+  el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ""}</svg>`;
+  return el;
+}
+
 const ls = {
   get(k) {
     try { return localStorage.getItem(k); } catch (e) { return null; }
@@ -63,8 +93,8 @@ const DEPTHS = [
 // Seni tonai (archyve) – kaip juos rodyti
 const OLD_DEPTHS = { juokingas: "Juokingas", svajingas: "Svajingas" };
 const KINDS = [
-  ["pokalbis", "💬 Pokalbis"],
-  ["veikla", "🎨 Veiklos"],
+  ["pokalbis", "Pokalbis"],
+  ["veikla", "Veiklos"],
 ];
 const COUNTS = { pokalbis: [4, 6, 8, 10], veikla: [2, 3, 4, 5] };
 const DEFAULT_COUNT = { pokalbis: 6, veikla: 3 };
@@ -186,13 +216,15 @@ function showTab() {
 
 // ---------- Scenarijaus forma ----------
 
-function chipGroup(root, name, options, selected) {
+const KIND_ICON = { pokalbis: "chat", veikla: "palette" };
+
+function chipGroup(root, name, options, selected, icons = {}) {
   root.replaceChildren(
     ...options.map(([value, label]) => {
       const id = `${name}-${value}`;
       return [
         h("input", { type: "radio", name, id, value, checked: String(value) === String(selected) }),
-        h("label", { for: id, text: label }),
+        h("label", { for: id }, icons[value] ? icon(icons[value]) : null, label),
       ];
     }).flat()
   );
@@ -200,7 +232,7 @@ function chipGroup(root, name, options, selected) {
 
 function renderChips() {
   const kind = kindOf(state.draft);
-  chipGroup($("#kinds"), "kind", KINDS, kind);
+  chipGroup($("#kinds"), "kind", KINDS, kind, KIND_ICON);
   const depth = DEPTHS.some(([v]) => v === state.draft?.depth) ? state.draft.depth : "vidutinis";
   chipGroup($("#depths"), "depth", DEPTHS, depth);
   renderCounts(kind, state.draft?.count);
@@ -273,7 +305,7 @@ async function suggestTopics() {
     showError(e.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = "✨ Pasiūlyk temų";
+    btn.replaceChildren(icon("sparkle"), "Pasiūlyk temų");
   }
 }
 
@@ -389,7 +421,7 @@ function stepper(stage) {
   const idx = STAGES.findIndex(([k]) => k === stage);
   return h("ol", { class: "stepper" }, STAGES.map(([k, label], i) =>
     h("li", { class: [i < idx && "done", i === idx && "now"].filter(Boolean).join(" ") },
-      h("span", { class: "step-dot", text: i < idx ? "✓" : String(i + 1) }),
+      h("span", { class: "step-dot" }, i < idx ? icon("check") : String(i + 1)),
       h("span", { text: label })
     )
   ));
@@ -409,7 +441,7 @@ function renderResult() {
   // Kol scenarijus peržiūrimas, forma lieka (galima kurti iš naujo); vėliau – paslepiama
   $("#form").hidden = Boolean(d && stage !== "review");
   if (!d || !d.scenario) {
-    root.replaceChildren(...(state.notice ? [h("div", { class: "card notice", text: state.notice })] : []));
+    root.replaceChildren(...(state.notice ? [h("div", { class: "card notice" }, icon("heart", "accent"), state.notice)] : []));
     return;
   }
   const kindLabel = kindOf(d) === "veikla" ? "veiklos" : "klausimai";
@@ -464,7 +496,7 @@ function renderReview(d, kindLabel) {
     contentBlocks(d),
     closingBlock(),
     h("div", { class: "actions" },
-      h("button", { class: "primary small", type: "button", text: `✓ ${kindLabel === "veiklos" ? "Veiklos" : "Klausimai"} tinka`, onclick: () => setStage("config") }),
+      h("button", { class: "primary small", type: "button", onclick: () => setStage("config") }, icon("check"), `${kindLabel === "veiklos" ? "Veiklos" : "Klausimai"} tinka`),
       newScenarioButton()
     ),
   ];
@@ -534,9 +566,9 @@ function planMinutes(d) {
 }
 
 function dateLine(d) {
-  return d.date
-    ? `📅 ${fmtDate(d.date)}, ${MEETING_START}–${endTime(MEETING_START)}`
-    : "📅 Data dar nenubalsuota – kai bus patvirtinta kalendoriuje, atsiras čia automatiškai.";
+  return [icon("calendar"), d.date
+    ? `${fmtDate(d.date)}, ${MEETING_START}–${endTime(MEETING_START)}`
+    : "Data dar nenubalsuota – kai bus patvirtinta kalendoriuje, atsiras čia automatiškai."];
 }
 
 function renderConfig(d) {
@@ -558,7 +590,7 @@ function renderConfig(d) {
   });
   update();
 
-  const confirmBtn = h("button", { class: "primary small", type: "button", text: "✓ Patvirtinti" });
+  const confirmBtn = h("button", { class: "primary small", type: "button" }, icon("check"), "Patvirtinti");
   confirmBtn.onclick = () => confirmPlan(confirmBtn);
 
   const roundRow = (r, i) => h("label", { class: "mini inline-row" },
@@ -567,7 +599,7 @@ function renderConfig(d) {
   );
   return h("div", { class: "card" },
     h("h2", { text: d.topic }),
-    h("p", { class: "meeting-line", text: dateLine(d) }),
+    h("p", { class: "meeting-line" }, dateLine(d)),
     h("p", { class: "label", style: "margin-top:16px", text: "Vakaro pradžia (min.)" }),
     h("div", { class: "mini inline-row" }, h("span", { text: "Įsižeminimas" }), h("span", { class: "fixed-min", text: String(GROUNDING.minutes) })),
     ROUNDS.map(roundRow),
@@ -591,7 +623,7 @@ function renderConfig(d) {
     ),
     total,
     h("div", { class: "actions" },
-      h("button", { class: "secondary", type: "button", text: `← Atgal prie ${veikla ? "veiklų" : "klausimų"}`, onclick: () => setStage("review") }),
+      h("button", { class: "secondary", type: "button", onclick: () => setStage("review") }, icon("arrow-left"), `Atgal prie ${veikla ? "veiklų" : "klausimų"}`),
       confirmBtn
     )
   );
@@ -612,7 +644,7 @@ async function confirmPlan(btn) {
     setStage("ready");
   } catch (e) {
     btn.disabled = false;
-    btn.textContent = "✓ Patvirtinti";
+    btn.replaceChildren(icon("check"), "Patvirtinti");
     alert(e.message);
   }
 }
@@ -641,20 +673,20 @@ function renderReady(d) {
   );
   return [
     h("div", { class: "card ready" },
-      h("p", { class: "label", text: kindOf(d) === "veikla" ? "🎨 Veiklų vakaras" : "💬 Pokalbis" }),
+      h("p", { class: "label" }, icon(KIND_ICON[kindOf(d)]), kindOf(d) === "veikla" ? "Veiklų vakaras" : "Pokalbis"),
       h("h2", { text: d.topic }),
-      h("p", { class: "meeting-line", text: dateLine(d) }),
+      h("p", { class: "meeting-line" }, dateLine(d)),
       h("p", { class: "hint", text: `${count} · planas ${fmtMinutes(planMinutes(d))}` }),
-      h("p", { class: "topic-state", text: d.revealed ? "📣 Tema paskelbta narėms" : "🤫 Tema kol kas paslaptis" }),
+      h("p", { class: "topic-state" }, icon(d.revealed ? "megaphone" : "secret"), d.revealed ? "Tema paskelbta narėms" : "Tema kol kas paslaptis"),
       h("div", { class: "actions" },
-        h("button", { class: "primary small", type: "button", text: "▶ Pradėti susitikimą", onclick: openHost }),
+        h("button", { class: "primary small", type: "button", onclick: openHost }, icon("play"), "Pradėti susitikimą"),
         revealButton(d),
-        h("button", { class: "secondary", type: "button", text: "✉ Kvietimas narėms", onclick: toggleInvite })
+        h("button", { class: "secondary", type: "button", onclick: toggleInvite }, icon("mail"), "Kvietimas narėms")
       ),
       h("div", { id: "invite" }),
       preview,
       h("div", { class: "actions subtle" },
-        h("button", { class: "link", type: "button", text: "✏️ Redaguoti", onclick: () => setStage("review") }),
+        h("button", { class: "link", type: "button", onclick: () => setStage("review") }, icon("pencil"), "Redaguoti"),
         newScenarioButton()
       )
     ),
@@ -685,7 +717,7 @@ async function completeMeeting() {
   const { item } = await api("/api/archive", { body: { entry: { ...entryOf(d, "done"), date: d.date || today() } } });
   if (state.archive) state.archive = [item, ...state.archive.filter((i) => i.id !== item.id)];
   clearDraft();
-  state.notice = `Susitikimas „${item.topic}“ išsaugotas archyve 💛`;
+  state.notice = `Susitikimas „${item.topic}“ išsaugotas archyve`;
   renderResult();
 }
 
@@ -703,7 +735,7 @@ function toggleInvite() {
   const err = h("p", { class: "error", hidden: true });
   const copy = h("button", { class: "secondary", type: "button", text: "Kopijuoti žinutę", hidden: true });
   copy.onclick = async () => {
-    try { await navigator.clipboard.writeText(out.value); copy.textContent = "Nukopijuota ✓"; } catch (e) { out.select(); }
+    try { await navigator.clipboard.writeText(out.value); copy.textContent = "Nukopijuota"; } catch (e) { out.select(); }
     setTimeout(() => (copy.textContent = "Kopijuoti žinutę"), 2000);
   };
   const share = navigator.share
@@ -780,7 +812,7 @@ function openHost() {
   host.slides = [
     { label: "Įsižeminimas", text: GROUNDING.text, min: GROUNDING.minutes, intro: true },
     ...ROUNDS.map((r, i) => ({
-      label: `Pasisakymų ratas · ${i + 1}/${ROUNDS.length}`,
+      label: `Ratas ${i + 1}/${ROUNDS.length}`,
       text: r.questions.join("\n"),
       sub: "Kiekviena pasisako iš eilės.",
       min: roundMinutes(d, r),
@@ -823,7 +855,7 @@ function openHost() {
   el.bar = h("span", {});
   el.barWrap = h("div", { class: "bar" }, el.bar);
   el.clock = h("span", { class: "clock" });
-  el.prev = h("button", { class: "secondary", type: "button", text: "← Atgal", onclick: () => move(-1) });
+  el.prev = h("button", { class: "secondary", type: "button", onclick: () => move(-1) }, icon("arrow-left"), "Atgal");
   el.pause = h("button", { class: "secondary", type: "button", onclick: togglePause });
   el.next = h("button", { class: "next", type: "button", onclick: () => move(1) });
 
@@ -831,7 +863,7 @@ function openHost() {
     h("div", { class: "host-top" },
       el.label, el.total,
       soundButton(),
-      h("button", { class: "host-close", type: "button", "aria-label": "Uždaryti", text: "✕", onclick: closeHost })
+      h("button", { class: "host-close", type: "button", "aria-label": "Uždaryti", onclick: closeHost }, icon("x", "solo"))
     ),
     h("div", { class: "host-body" }, h("div", {}, el.q, el.sub)),
     el.notice,
@@ -849,7 +881,7 @@ function openHost() {
 function showFinish() {
   clearTimeout(host.timer);
   const err = h("p", { class: "error", hidden: true });
-  const yes = h("button", { class: "next", type: "button", text: "✓ Taip, susitikimas įvyko" });
+  const yes = h("button", { class: "next", type: "button" }, icon("check"), "Taip, susitikimas įvyko");
   yes.onclick = async () => {
     yes.disabled = true;
     yes.textContent = "Saugoma…";
@@ -862,18 +894,18 @@ function showFinish() {
       err.textContent = e.message;
       err.hidden = false;
       yes.disabled = false;
-      yes.textContent = "✓ Taip, susitikimas įvyko";
+      yes.replaceChildren(icon("check"), "Taip, susitikimas įvyko");
     }
   };
   $("#host").replaceChildren(
     h("div", { class: "host-top" },
       h("span", { class: "host-label", text: "Pabaiga" }),
       h("span", { text: `Vakaras ${fmtClock(host.total)}` }),
-      h("button", { class: "host-close", type: "button", "aria-label": "Uždaryti", text: "✕", onclick: closeHost })
+      h("button", { class: "host-close", type: "button", "aria-label": "Uždaryti", onclick: closeHost }, icon("x", "solo"))
     ),
     h("div", { class: "host-body" },
       h("div", { class: "finish" },
-        h("p", { class: "host-q", text: "Ačiū už vakarą 💛" }),
+        h("p", { class: "host-q" }, "Ačiū už vakarą ", icon("heart", "accent")),
         h("p", { class: "host-sub", text: "Ar susitikimas įvyko? Patvirtinus jis bus išsaugotas archyve, o tema ir klausimai atsivers visoms." }),
         h("div", { class: "finish-actions" },
           yes,
@@ -963,7 +995,8 @@ function renderHost() {
   el.sub.textContent = slide.sub || "";
   el.sub.hidden = !slide.sub;
   el.prev.disabled = host.i === 0;
-  el.next.textContent = host.i === host.slides.length - 1 ? "Pabaiga" : "Toliau →";
+  if (host.i === host.slides.length - 1) el.next.replaceChildren("Pabaiga");
+  else el.next.replaceChildren("Toliau", icon("arrow-right", "after"));
   renderClock();
 }
 
@@ -1049,7 +1082,7 @@ function playSound(name) {
 function soundButton() {
   const btn = h("button", { class: "host-close", type: "button" });
   const paint = () => {
-    btn.textContent = soundOn ? "🔔" : "🔕";
+    btn.replaceChildren(icon(soundOn ? "bell" : "bell-off", "solo"));
     btn.setAttribute("aria-label", soundOn ? "Išjungti garsą" : "Įjungti garsą");
   };
   btn.onclick = () => {
@@ -1121,13 +1154,13 @@ function archiveCard(item) {
   if (item.hidden) {
     return h("article", { class: "card item secret" },
       h("p", { class: "date", text: fmtDate(item.date) }),
-      h("h3", { text: item.topic ? `📣 ${item.topic}` : "🤫 Tema – staigmena" }),
+      h("h3", {}, icon(item.topic ? "megaphone" : "secret"), item.topic || "Tema – staigmena"),
       h("p", { class: "hint", text: `${item.host ? `Veda ${item.host}. ` : ""}${item.topic ? "Visa programa" : "Tema ir programa"} atsivers po susitikimo.` })
     );
   }
   item = normalize(JSON.parse(JSON.stringify(item)));
   const depth = (DEPTHS.find(([v]) => v === item.depth) || [])[1] || OLD_DEPTHS[item.depth];
-  const kindLabel = kindOf(item) === "veikla" ? "🎨 Veiklos" : "💬 Pokalbis";
+  const kindLabel = kindOf(item) === "veikla" ? "Veiklos" : "Pokalbis";
   const acts = item.scenario.activities || [];
   const details = h("div", { class: "details", hidden: true },
     item.scenario.intro ? h("p", { class: "hint", style: "font-style:italic", text: item.scenario.intro }) : null,
@@ -1168,8 +1201,8 @@ function revealButton(item) {
   const btn = h("button", {
     class: "secondary",
     type: "button",
-    text: item.revealed ? "Vėl paslėpti temą" : "📣 Paskelbti temą narėms",
   });
+  btn.append(...(item.revealed ? ["Vėl paslėpti temą"] : [icon("megaphone"), "Paskelbti temą narėms"]));
   btn.onclick = async () => {
     const reveal = !item.revealed;
     const question = reveal
@@ -1421,16 +1454,17 @@ function renderNextBanner() {
   const topic = info.topicState === "revealed"
     ? `${info.topic}${info.kind === "veikla" ? " · veiklų vakaras" : ""}`
     : info.topicState === "secret"
-      ? (iAmHost ? "tavo tema dar paslaptis" : "🤫 staigmena")
+      ? (iAmHost ? "Tavo tema dar paslaptis" : "Staigmena")
       : iAmHost ? "Tema dar nesuplanuota" : "Tema dar nežinoma";
   const absent = (cal.absent || []).includes(state.me.id);
   el.replaceChildren(
     h("span", { class: "nb-label", text: "Kitas susitikimas" }),
-    h("strong", { class: "nb-topic", text: topic }),
+    h("strong", { class: "nb-topic" }, info.topicState === "secret" ? icon("secret") : null, topic),
     h("span", { class: "nb-meta" },
-      m ? `📅 ${fmtDate(m.date)}, ${m.time || MEETING_START}–${endTime(m.time || MEETING_START)}` : "📅 data dar nenubalsuota",
+      icon("calendar"),
+      m ? `${fmtDate(m.date)}, ${m.time || MEETING_START}–${endTime(m.time || MEETING_START)}` : "data dar nenubalsuota",
       iAmHost ? " · vedi tu" : ` · veda ${host}`,
-      absent ? " · 🙅 tu negalėsi" : ""
+      absent ? " · tu negalėsi" : ""
     )
   );
   el.classList.toggle("revealed", info.topicState === "revealed");
@@ -1512,7 +1546,7 @@ async function finishLinkGoogle(ret) {
     const r = await api("/api/auth", { body: { action: "link-google", credential: ret.credential } });
     state.me = r.user;
     renderUserBar();
-    note("Google paskyra susieta ✓");
+    note("Google paskyra susieta");
   } catch (e) {
     note(e.message, true);
   }
@@ -1533,11 +1567,11 @@ function scheduleSave() {
       if (r.autoConfirmed) {
         state.calendar.meeting = r.meeting;
         state.meeting = r.meeting;
-        state.calStatus = `🎉 Visos pasižymėjo – data patvirtinta automatiškai: ${fmtDate(r.meeting.date)}.` +
+        state.calStatus = `Visos pasižymėjo – data patvirtinta automatiškai: ${fmtDate(r.meeting.date)}.` +
           (r.emailed ? ` Vedančiajai ${r.meeting.host} išsiųstas laiškas.` : "");
         drawCalendar();
       } else {
-        setCalStatus("Išsaugota ✓");
+        setCalStatus("Išsaugota");
       }
     } catch (e) {
       setCalStatus(e.message, true);
@@ -1551,7 +1585,7 @@ async function setMeeting(meeting) {
     state.calendar.meeting = r.meeting;
     state.meeting = r.meeting;
     if (r.meeting) state.calendar.rotation.nextHost = r.meeting.host;
-    state.calStatus = r.emailed ? `Vedančiajai ${r.meeting.host} išsiųstas laiškas ✉` : "";
+    state.calStatus = r.emailed ? `Vedančiajai ${r.meeting.host} išsiųstas laiškas` : "";
     drawCalendar();
   } catch (e) {
     alert(e.message);
@@ -1564,7 +1598,7 @@ async function setAbsent(flag) {
     state.calendar = r;
     state.meeting = r.meeting;
     state.calStatus = r.autoConfirmed
-      ? `🎉 Visos atsakė – data patvirtinta automatiškai: ${fmtDate(r.meeting.date)}.` + (r.emailed ? ` Vedančiajai ${r.meeting.host} išsiųstas laiškas.` : "")
+      ? `Visos atsakė – data patvirtinta automatiškai: ${fmtDate(r.meeting.date)}.` + (r.emailed ? ` Vedančiajai ${r.meeting.host} išsiųstas laiškas.` : "")
       : flag ? "Pažymėta: šį kartą negalėsi dalyvauti." : "";
     drawCalendar();
   } catch (e) {
@@ -1615,7 +1649,7 @@ function rotationCard(cal) {
       )
     )),
     swapped ? h("p", { class: "hint", style: "text-align:center", text: `Šį kartą veda ${host} (pagal eilę – ${scheduled}).` }) : null,
-    isAbsent(cal, host) ? h("p", { class: "absent-warn", text: `⚠ ${host} pažymėjo, kad negalės dalyvauti – pasirinkite kitą vedančiąją.` }) : null,
+    isAbsent(cal, host) ? h("p", { class: "absent-warn" }, icon("warning"), `${host} pažymėjo, kad negalės dalyvauti – pasirinkite kitą vedančiąją.`) : null,
     h("div", { class: "row", style: "margin-top:14px;align-items:end" },
       h("label", { class: "mini" }, "Kitą susitikimą veda",
         hostSelect(cal, host, (name) => {
@@ -1648,7 +1682,8 @@ function emailCard(cal) {
   };
   if (cal.myEmail && !state.editEmail) {
     return h("p", { class: "hint email-line" },
-      `✉ Pranešimai siunčiami: ${cal.myEmail} · `,
+      icon("mail"),
+      `Pranešimai siunčiami: ${cal.myEmail} · `,
       h("button", { class: "link", type: "button", text: "keisti", onclick: () => { state.editEmail = true; drawCalendar(); } })
     );
   }
@@ -1660,15 +1695,42 @@ function emailCard(cal) {
   );
 }
 
+// Vietos laikas (Vilnius) → UTC formatu, kurio reikia Google kalendoriui
+function vilniusUtcStamp(date, time) {
+  const [y, m, d] = date.split("-").map(Number);
+  const [hh, mm] = time.split(":").map(Number);
+  const guess = Date.UTC(y, m - 1, d, hh, mm);
+  const asTz = new Date(new Date(guess).toLocaleString("en-US", { timeZone: "Europe/Vilnius" }));
+  const asUtc = new Date(new Date(guess).toLocaleString("en-US", { timeZone: "UTC" }));
+  return (t) => new Date(guess - (asTz - asUtc) + t).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+function addToCalendar(m) {
+  const time = m.time || MEETING_START;
+  const topic = m.topicState === "revealed" ? m.topic : "";
+  const title = topic ? `Genties susitikimas: ${topic}` : "Genties susitikimas";
+  const details = [m.host && `Veda: ${m.host}`, topic && `Tema: ${topic}`].filter(Boolean).join("\n");
+  const at = vilniusUtcStamp(m.date, time);
+  const google = "https://calendar.google.com/calendar/render?" + new URLSearchParams({
+    action: "TEMPLATE", text: title, dates: `${at(0)}/${at(MEETING_MINUTES * 60000)}`, details, location: m.place || "",
+  });
+  const ics = "/api/ics?" + new URLSearchParams({ date: m.date, time, place: m.place || "", topic, host: m.host || "" });
+  return h("div", { class: "add-cal" },
+    h("span", { class: "add-cal-label" }, icon("calendar-plus"), "Pridėti į kalendorių:"),
+    h("a", { class: "secondary small btn-link", href: google, target: "_blank", rel: "noopener" }, "Google kalendorius"),
+    h("a", { class: "secondary small btn-link", href: ics }, "Telefono kalendorius")
+  );
+}
+
 function meetingCard(cal) {
   const m = cal.meeting;
   if (!m) {
     const nt = cal.nextTopic;
     return h("div", { class: "card meeting empty" },
       nt && nt.topicState !== "none"
-        ? h("p", { class: "next-topic", text: nt.topicState === "revealed"
+        ? h("p", { class: "next-topic" }, nt.topicState === "revealed"
             ? `Kito susitikimo tema: ${nt.topic}${nt.kind === "veikla" ? " (veiklų vakaras)" : ""} · veda ${nt.host}`
-            : `Kito susitikimo tema: 🤫 staigmena · veda ${nt.host}` })
+            : ["Kito susitikimo tema: ", icon("secret"), `staigmena · veda ${nt.host}`])
         : null,
       h("p", { text: "Kitas susitikimas dar nepaskirtas. Pasižymėk, kada gali. Kai pasižymės visos, daugiausiai balsų surinkusi diena patvirtinama automatiškai." })
     );
@@ -1679,21 +1741,22 @@ function meetingCard(cal) {
     h("p", { class: "label", text: "Kitas susitikimas" }),
     h("p", { class: "big", text: `${fmtDate(m.date)}, ${m.time || MEETING_START}–${endTime(m.time || MEETING_START)}` }),
     h("p", { style: "margin:0 0 4px", text: `Veda: ${m.host || "—"}` }),
-    h("p", { style: "margin:0 0 12px", text:
+    h("p", { style: "margin:0 0 12px" },
       m.topicState === "revealed" ? `Tema: ${m.topic}${m.kind === "veikla" ? " (veiklų vakaras)" : ""}`
-      : m.topicState === "secret" ? "Tema: 🤫 staigmena"
-      : "Tema dar nesuplanuota" }),
+      : m.topicState === "secret" ? ["Tema: ", icon("secret"), "staigmena"]
+      : "Tema dar nesuplanuota"),
     h("div", { class: "row" }, h("label", { class: "mini" }, "Pradžia", time), h("label", { class: "mini" }, "Vieta", place)),
     h("div", { class: "actions" },
       h("button", { class: "secondary small", type: "button", text: "Išsaugoti", onclick: () => setMeeting({ ...m, time: time.value, place: place.value }) }),
       h("button", { class: "secondary small", type: "button", text: "Atšaukti susitikimą", onclick: () => confirm("Atšaukti paskirtą susitikimą?") && setMeeting(null) })
     ),
+    addToCalendar(m),
     (cal.absent || []).length
-      ? h("p", { class: "absent-line", text: `🙅 Negalės: ${cal.absent.map((id) => (cal.members.find((x) => x.id === id) || {}).name || id).join(", ")}` })
+      ? h("p", { class: "absent-line" }, icon("user-x"), `Negalės: ${cal.absent.map((id) => (cal.members.find((x) => x.id === id) || {}).name || id).join(", ")}`)
       : null,
     isAbsent(cal, state.me.id)
       ? h("button", { class: "link", type: "button", text: "Vis dėlto galėsiu dalyvauti", onclick: () => setAbsent(false) })
-      : h("button", { class: "link", type: "button", text: "🙅 Negalėsiu dalyvauti šiame susitikime", onclick: () => confirm("Pažymėti, kad šiame susitikime dalyvauti negalėsi?") && setAbsent(true) }),
+      : h("button", { class: "link", type: "button", onclick: () => confirm("Pažymėti, kad šiame susitikime dalyvauti negalėsi?") && setAbsent(true) }, icon("user-x"), "Negalėsiu dalyvauti šiame susitikime"),
     m.setBy ? h("p", { class: "hint", text: m.auto ? "Patvirtinta automatiškai pagal balsus" : `Paskyrė ${m.setBy}` }) : null
   );
 }
@@ -1800,27 +1863,27 @@ function drawCalendar() {
         h("span", {}, h("i", { class: "l-mine" }), "tu gali"),
         h("span", {}, h("i", { class: "l-best" }), "tinka daugiausiai"),
         h("span", {}, h("b", { class: "l-dot" }), "viena narė"),
-        h("span", { text: "★ susitikimas" })
+        h("span", {}, h("i", { class: "l-meet" }), "susitikimas")
       ),
       cal.meeting
         ? null
         : isAbsent(cal, meId)
           ? h("p", { class: "absent-me" },
-              "🙅 Pažymėjai, kad šį kartą dalyvauti negalėsi. ",
+              icon("user-x"),
+              "Pažymėjai, kad šį kartą dalyvauti negalėsi. ",
               h("button", { class: "link", type: "button", text: "Atšaukti", onclick: () => setAbsent(false) })
             )
           : h("button", {
               class: "secondary small absent-btn",
               type: "button",
-              text: "🙅 Šį kartą dalyvauti negalėsiu",
               onclick: () => confirm("Pažymėti, kad šį kartą negalėsi dalyvauti? Tavo pažymėtos dienos bus išvalytos.") && setAbsent(true),
-            }),
+            }, icon("user-x"), "Šį kartą dalyvauti negalėsiu"),
       h("p", { class: "status", id: "cal-status", text: state.calStatus })
     ),
     h("div", { class: "card" },
       h("h2", { text: "Geriausios dienos" }),
       voteNote ? h("p", { class: "hint", style: "margin:0 0 10px", text: voteNote }) : null,
-      !cal.meeting && absentNames.length ? h("p", { class: "absent-line", text: `🙅 Negalės: ${absentNames.join(", ")}` }) : null,
+      !cal.meeting && absentNames.length ? h("p", { class: "absent-line" }, icon("user-x"), `Negalės: ${absentNames.join(", ")}`) : null,
       ranked.length
         ? h("ol", { class: "best-list" }, ranked.map(([d, ids]) =>
             h("li", {},
@@ -1833,7 +1896,7 @@ function drawCalendar() {
                 h("p", { class: "hint", style: "margin:2px 0 0", text: `${ids.length} iš ${Math.max(order.length, ids.length)}: ${ids.map(nameOf).join(", ")}` })
               ),
               cal.meeting?.date === d
-                ? h("span", { class: "hint", text: "★ Paskirta" })
+                ? h("span", { class: "hint" }, icon("check"), "Paskirta")
                 : h("button", {
                     class: "secondary small",
                     type: "button",
@@ -1900,6 +1963,7 @@ async function init() {
     renderCounts(selectedKind());
     $("#suggestions").hidden = true;
   });
+  $("#suggest").replaceChildren(icon("sparkle"), "Pasiūlyk temų");
   $("#suggest").addEventListener("click", suggestTopics);
   $("#delete-account").addEventListener("click", deleteAccount);
   $("#topic").addEventListener("input", checkTopicUsed);

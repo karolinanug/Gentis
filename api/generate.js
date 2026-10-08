@@ -141,7 +141,7 @@ function invitePrompt(topic, details) {
   return `Parašyk trumpą, šiltą kvietimą į būrelio susitikimą, kurį vedančioji nusiųs narėms per Messenger ar WhatsApp.
 ${lines.join("\n")}
 
-3–6 sakiniai, gali būti 1–3 jaustukai. Būtinai paminėk datą, laiką ir vietą, jei jie nurodyti.
+3–6 sakiniai, be jaustukų (emoji). Būtinai paminėk datą, laiką ir vietą, jei jie nurodyti.
 Neatskleisk konkrečių klausimų – tik sužadink smalsumą temai. Jei tinka, pasiūlyk ką nors apgalvoti ar atsinešti, susijusio su tema.
 Formatas: {"message": "..."} (naujas eilutes žymėk \\n)`;
 }
