@@ -761,8 +761,29 @@ function setSession(token, user) {
 }
 
 // Google „Sign in with Google“ mygtukas. Skriptas įkeliamas tik kai reikia.
+// Google prisijungimas nukreipimo režimu: puslapis pereina į Google ir grįžta
+// per /api/google su ženklu adreso fragmente (#google=…). Taip veikia ir telefonuose,
+// kur iššokantis langas dažnai lieka baltas.
 let googleScript = null;
-let googleHandler = null;
+let googleReturn = null; // { credential } arba { error: true }, kai ką tik grįžome iš Google
+
+const session = {
+  get(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) {} },
+};
+
+function readGoogleReturn() {
+  const hash = location.hash;
+  if (hash.startsWith("#google=")) googleReturn = { credential: decodeURIComponent(hash.slice(8)) };
+  else if (hash === "#google-error") googleReturn = { error: true };
+  else return;
+  googleReturn.intent = session.get("googleIntent") || "login";
+  session.set("googleIntent", null);
+  const back = session.get("googleBack") || "";
+  session.set("googleBack", null);
+  history.replaceState(null, "", location.pathname + location.search + back);
+}
+
 function loadGoogle() {
   if (!googleScript) {
     googleScript = new Promise((resolve, reject) => {
@@ -770,7 +791,8 @@ function loadGoogle() {
       tag.onload = () => {
         window.google.accounts.id.initialize({
           client_id: state.googleClientId,
-          callback: (r) => googleHandler && googleHandler(r.credential),
+          ux_mode: "redirect",
+          login_uri: `${location.origin}/api/google`,
         });
         resolve(window.google);
       };
@@ -781,11 +803,12 @@ function loadGoogle() {
   return googleScript;
 }
 
-function googleButton(onCredential, onError) {
+function googleButton(intent, onError) {
+  session.set("googleIntent", intent);
+  session.set("googleBack", intent === "link" ? location.hash : "");
   const box = h("div", { class: "google-btn" });
   loadGoogle()
     .then((google) => {
-      googleHandler = onCredential;
       google.accounts.id.renderButton(box, {
         theme: matchMedia("(prefers-color-scheme: dark)").matches ? "filled_black" : "outline",
         size: "large",
@@ -797,6 +820,8 @@ function googleButton(onCredential, onError) {
     .catch(onError);
   return box;
 }
+
+const GOOGLE_ERROR = "Nepavyko prisijungti su Google, pabandyk dar kartą";
 
 function googleCard(fail) {
   const card = h("div", { class: "card google-card" }, h("p", { class: "label", text: "Greičiausia – su Google" }));
@@ -828,7 +853,13 @@ function googleCard(fail) {
     };
     card.replaceChildren(h("h2", { text: "Sveika!" }), form);
   };
-  card.append(googleButton(onCredential, fail));
+  card.append(googleButton("login", fail));
+  if (googleReturn && googleReturn.intent === "login") {
+    const ret = googleReturn;
+    googleReturn = null;
+    if (ret.error) fail(new Error(GOOGLE_ERROR));
+    else onCredential(ret.credential);
+  }
   return card;
 }
 
@@ -935,17 +966,25 @@ function showLinkGoogle() {
   box.replaceChildren(
     h("div", { class: "card" },
       h("p", { class: "hint", style: "margin:0 0 12px", text: "Susiejus kitą kartą galėsi prisijungti vienu paspaudimu." }),
-      googleButton(async (credential) => {
-        try {
-          const r = await api("/api/auth", { body: { action: "link-google", credential } });
-          state.me = r.user;
-          renderUserBar();
-          box.replaceChildren(h("p", { class: "hint", style: "margin:0 0 16px", text: "Google paskyra susieta ✓" }));
-        } catch (x) { fail(x); }
-      }, fail),
+      googleButton("link", fail),
       err
     )
   );
+}
+
+async function finishLinkGoogle(ret) {
+  const box = $("#link-google");
+  const note = (text, isErr) =>
+    box.replaceChildren(h("p", { class: isErr ? "error" : "hint", style: "margin:0 0 16px", text }));
+  if (ret.error) return note(GOOGLE_ERROR, true);
+  try {
+    const r = await api("/api/auth", { body: { action: "link-google", credential: ret.credential } });
+    state.me = r.user;
+    renderUserBar();
+    note("Google paskyra susieta ✓");
+  } catch (e) {
+    note(e.message, true);
+  }
 }
 
 let saveTimer = null;
@@ -1139,6 +1178,7 @@ function enterApp() {
 // ---------- Paleidimas ----------
 
 async function init() {
+  readGoogleReturn();
   renderChips();
   $("#code").value = state.code;
   $("#form").addEventListener("submit", generate);
@@ -1158,8 +1198,17 @@ async function init() {
   }
   renderResult();
   window.addEventListener("hashchange", () => { if (state.me) showTab(); });
-  if (state.me) enterApp();
-  else showAuth();
+  if (state.me) {
+    enterApp();
+    if (googleReturn && googleReturn.intent === "link") {
+      const ret = googleReturn;
+      googleReturn = null;
+      finishLinkGoogle(ret);
+    }
+  } else {
+    if (googleReturn) googleReturn.intent = "login";
+    showAuth();
+  }
 }
 
 init();
