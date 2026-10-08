@@ -201,8 +201,10 @@ module.exports = async (req, res) => {
       if (!meeting) {
         emailed = await notifyHost(next, users, "Kito susitikimo data paskirta.");
       } else if (key(meeting.host) !== key(next.host)) {
-        const who = key(user.name) === key(meeting.host) ? `${meeting.host} negalės vesti` : `${user.name} pakeitė vedančiąją`;
-        emailed = await notifyHost(next, users, `${who} – šį susitikimą vietoj ${meeting.host} vesi tu.`);
+        const reason = key(user.name) === key(meeting.host)
+          ? `${meeting.host} negalės vesti, todėl šį susitikimą vesi tu.`
+          : `Vedančiąją pakeitė ${user.name}: šį susitikimą vesi tu (anksčiau buvo numatyta – ${meeting.host}).`;
+        emailed = await notifyHost(next, users, reason);
       } else if (meeting.date !== next.date || meeting.time !== next.time || meeting.place !== next.place) {
         emailed = await notifyHost(next, users, "Susitikimo informacija atnaujinta.");
       }

@@ -1246,7 +1246,7 @@ function rotationCard(cal) {
         h("span", { class: "rot-name", text: name })
       )
     )),
-    swapped ? h("p", { class: "hint", style: "text-align:center", text: `Šį kartą vietoj ${scheduled} veda ${host}.` }) : null,
+    swapped ? h("p", { class: "hint", style: "text-align:center", text: `Šį kartą veda ${host} (pagal eilę – ${scheduled}).` }) : null,
     h("div", { class: "row", style: "margin-top:14px;align-items:end" },
       h("label", { class: "mini" }, "Kitą susitikimą veda",
         hostSelect(cal, host, (name) => {
