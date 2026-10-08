@@ -61,7 +61,7 @@ const state = {
   code: ls.get("burelioKodas") || "",
   token: ls.get("sesija") || "",
   me: null,
-  draft: (() => { try { return JSON.parse(ls.get("juodrastis")); } catch (e) { return null; } })(),
+  draft: null, // kiekvienos narės juodraštis atskiras – žr. loadDraft()
   archive: null,
   calendar: null,
   meeting: null,
@@ -69,8 +69,26 @@ const state = {
   googleClientId: null,
 };
 
+const draftKey = () => `juodrastis:${state.me ? state.me.id : ""}`;
+
 function saveDraft() {
-  ls.set("juodrastis", state.draft ? JSON.stringify(state.draft) : null);
+  if (!state.me) return;
+  ls.set(draftKey(), state.draft ? JSON.stringify(state.draft) : null);
+}
+
+function loadDraft() {
+  // Senas bendras juodraštis (iki atskirų juodraščių) atitenka pirmai prisijungusiai narei
+  const legacy = ls.get("juodrastis");
+  if (legacy) {
+    if (!ls.get(draftKey())) ls.set(draftKey(), legacy);
+    ls.set("juodrastis", null);
+  }
+  try { state.draft = JSON.parse(ls.get(draftKey())); } catch (e) { state.draft = null; }
+  $("#topic").value = state.draft ? state.draft.topic || "" : "";
+  $("#suggestions").hidden = true;
+  showError("");
+  renderChips();
+  renderResult();
 }
 
 const hasAccess = () => Boolean(state.me || state.code);
@@ -1096,6 +1114,10 @@ function showAuth() {
   setSession(null, null);
   state.archive = null;
   state.calendar = null;
+  state.meeting = null;
+  state.draft = null;
+  $("#topic").value = "";
+  renderResult();
   $("#app").hidden = true;
   $("#auth").hidden = false;
   renderAuth($("#auth"));
@@ -1108,6 +1130,7 @@ function enterApp() {
   $("#link-google").replaceChildren();
   renderUserBar();
   updateCodeField();
+  loadDraft();
   showTab();
   if (!state.archive) loadArchive().catch(() => {});
   if (!state.calendar) loadCalendar().catch(() => {});
@@ -1118,7 +1141,6 @@ function enterApp() {
 async function init() {
   renderChips();
   $("#code").value = state.code;
-  if (state.draft) $("#topic").value = state.draft.topic || "";
   $("#form").addEventListener("submit", generate);
   $("#suggest").addEventListener("click", suggestTopics);
   $("#topic").addEventListener("input", checkTopicUsed);
