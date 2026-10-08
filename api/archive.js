@@ -19,6 +19,16 @@ function cleanList(list) {
     : [];
 }
 
+function cleanActivities(list) {
+  if (!Array.isArray(list)) return undefined;
+  return list.slice(0, 10).map((a) => ({
+    title: String((a && a.title) || "").slice(0, 120),
+    description: String((a && a.description) || "").slice(0, 1500),
+    minutes: Math.min(180, Math.max(0, Number(a && a.minutes) || 0)),
+    materials: String((a && a.materials) || "").slice(0, 300),
+  }));
+}
+
 function isOwner(item, user) {
   if (!user) return false;
   if (item.hostId) return item.hostId === user.id;
@@ -81,6 +91,7 @@ module.exports = async (req, res) => {
         id,
         topic,
         date: DATE.test(entry.date || "") ? entry.date : store.today(),
+        kind: entry.kind === "veikla" ? "veikla" : "pokalbis",
         depth: typeof entry.depth === "string" ? entry.depth.slice(0, 20) : "vidutinis",
         count: Number(entry.count) || undefined,
         scenario: {
@@ -88,6 +99,7 @@ module.exports = async (req, res) => {
           warmup: cleanList(s.warmup),
           main: cleanList(s.main),
           closing: cleanList(s.closing),
+          activities: cleanActivities(s.activities),
         },
         timing: {
           warmup: Math.min(60, Math.max(0, Number(t.warmup) || 0)),

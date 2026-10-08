@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Gentis</title>
+  <title>Genties susitikimas</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -15,7 +15,7 @@
   <main id="app" hidden>
     <header class="top">
       <div class="top-row">
-        <h1>Gentis</h1>
+        <h1>Genties susitikimas</h1>
         <div class="userbar" id="userbar"></div>
       </div>
       <div id="link-google"></div>
@@ -28,6 +28,10 @@
 
     <section id="tab-scenarijus" class="tab">
       <form class="card" id="form">
+        <div class="field">
+          <span class="label">Formatas</span>
+          <div class="chips" id="kinds"></div>
+        </div>
         <div class="field">
           <div class="label-row">
             <label for="topic">Tema</label>
@@ -42,7 +46,7 @@
           <div class="chips" id="depths"></div>
         </div>
         <div class="field">
-          <span class="label">Pagrindinių klausimų skaičius</span>
+          <span class="label" id="count-label">Pagrindinių klausimų skaičius</span>
           <div class="chips" id="counts"></div>
         </div>
         <div class="field" id="code-field">

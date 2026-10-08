@@ -48,7 +48,20 @@ const DEPTHS = [
   ["juokingas", "Juokingas"],
   ["svajingas", "Svajingas"],
 ];
-const COUNTS = [4, 6, 8, 10];
+const KINDS = [
+  ["pokalbis", "💬 Pokalbis"],
+  ["veikla", "🎨 Veiklos"],
+];
+const COUNTS = { pokalbis: [4, 6, 8, 10], veikla: [2, 3, 4, 5] };
+const DEFAULT_COUNT = { pokalbis: 6, veikla: 3 };
+const COUNT_LABEL = { pokalbis: "Pagrindinių klausimų skaičius", veikla: "Veiklų skaičius" };
+// Susitikimai visada 18:30–21:30
+const MEETING_START = "18:30";
+const MEETING_MINUTES = 180;
+const GROUNDING = {
+  minutes: 3,
+  text: "Atsisėskime patogiai ir užsimerkime. Giliai įkvėpkime per nosį ir lėtai iškvėpkime – tris kartus. Pajuskime, kaip pėdos remiasi į žemę, ir palikime dienos rūpesčius už durų.",
+};
 const MONTHS_SHORT = ["sau", "vas", "kov", "bal", "geg", "bir", "lie", "rgp", "rgs", "spa", "lap", "gru"];
 const SECTIONS = [
   ["warmup", "Apšilimas"],
@@ -56,6 +69,17 @@ const SECTIONS = [
   ["closing", "Užbaigimas"],
 ];
 const DEFAULT_TIMING = { warmup: 5, main: 10, closing: 5 };
+const DEFAULT_ACTIVITY_TIMING = { closing: 10 };
+
+const kindOf = (d) => (d && d.kind === "veikla" ? "veikla" : "pokalbis");
+const selectedKind = () => ($("input[name=kind]:checked") || {}).value || "pokalbis";
+const sectionsFor = (d) => (kindOf(d) === "veikla" ? [["closing", "Užbaigimas"]] : SECTIONS);
+
+function endTime(start) {
+  const [hh, mm] = (start || MEETING_START).split(":").map(Number);
+  const total = hh * 60 + mm + MEETING_MINUTES;
+  return `${pad(Math.floor(total / 60) % 24)}:${pad(total % 60)}`;
+}
 
 const state = {
   code: ls.get("burelioKodas") || "",
@@ -139,10 +163,18 @@ function chipGroup(root, name, options, selected) {
 }
 
 function renderChips() {
+  const kind = kindOf(state.draft);
+  chipGroup($("#kinds"), "kind", KINDS, kind);
   chipGroup($("#depths"), "depth", DEPTHS, state.draft?.depth || "vidutinis");
-  chipGroup($("#counts"), "count", COUNTS.map((n) => [n, String(n)]), state.draft?.count || 6);
+  renderCounts(kind, state.draft?.count);
 }
 
+function renderCounts(kind, selected) {
+  const options = COUNTS[kind];
+  const value = options.includes(Number(selected)) ? selected : DEFAULT_COUNT[kind];
+  chipGroup($("#counts"), "count", options.map((n) => [n, String(n)]), value);
+  $("#count-label").textContent = COUNT_LABEL[kind];
+}
 function updateCodeField() {
   $("#code-field").hidden = Boolean(state.me);
 }
@@ -170,7 +202,7 @@ function checkTopicUsed() {
   const topic = $("#topic").value.trim().toLowerCase();
   const used = topic && (state.archive || []).filter((i) => i.topic && i.topic.trim().toLowerCase() === topic);
   if (used && used.length) {
-    note.textContent = `Šia tema jau kalbėjotės: ${used.map((i) => fmtDate(i.date)).join("; ")}. Klausimai nesikartos.`;
+    note.textContent = `Šia tema jau buvote susitikusios: ${used.map((i) => fmtDate(i.date)).join("; ")}. Klausimai ir veiklos nesikartos.`;
     note.hidden = false;
   } else {
     note.hidden = true;
@@ -185,7 +217,7 @@ async function suggestTopics() {
   btn.disabled = true;
   btn.textContent = "Galvojama…";
   try {
-    const { topics = [] } = await api("/api/generate", { body: { mode: "topics" } });
+    const { topics = [] } = await api("/api/generate", { body: { mode: "topics", kind: selectedKind() } });
     box.replaceChildren(
       ...topics.map((t) =>
         h("button", {
@@ -217,20 +249,26 @@ async function generate(ev) {
   showError("");
   if (!rememberCode()) return;
   const topic = $("#topic").value.trim();
+  const kind = selectedKind();
   const depth = $("input[name=depth]:checked").value;
   const count = Number($("input[name=count]:checked").value);
   const btn = $("#go");
   btn.disabled = true;
   btn.textContent = "Kuriama… (apie 10–20 s)";
   try {
-    const scenario = await api("/api/generate", { body: { mode: "scenario", topic, depth, count } });
+    const scenario = await api("/api/generate", { body: { mode: "scenario", kind, topic, depth, count } });
     const prev = state.draft;
+    const defaults = kind === "veikla" ? DEFAULT_ACTIVITY_TIMING : DEFAULT_TIMING;
+    if (kind === "veikla") {
+      scenario.activities = (scenario.activities || []).map((a) => ({ ...a, minutes: Number(a.minutes) || 30 }));
+    }
     state.draft = {
+      kind,
       topic,
       depth,
       count,
       scenario,
-      timing: prev?.timing ? { ...prev.timing } : { ...DEFAULT_TIMING },
+      timing: prev?.timing && kindOf(prev) === kind ? { ...prev.timing } : { ...defaults },
       date: prev && !prev.id && prev.date ? prev.date : defaultDate(),
     };
     saveDraft();
@@ -264,7 +302,7 @@ function renderResult() {
   if (!d || !d.scenario) { root.replaceChildren(); return; }
   const s = d.scenario;
 
-  const sections = SECTIONS.map(([key, title]) => {
+  const sections = sectionsFor(d).map(([key, title]) => {
     const list = s[key] || [];
     if (!list.length) return null;
     return [
@@ -282,6 +320,7 @@ function renderResult() {
     h("h2", { text: d.topic }),
     h("p", { class: "hint", text: "Spustelk ant bet kurio teksto, kad jį pataisytum savais žodžiais." }),
     editable("p", { class: "intro" }, s.intro || "", (v) => { s.intro = v; }),
+    kindOf(d) === "veikla" ? activitiesBlock(d) : null,
     sections,
     timingCard(),
     actionsBar(),
@@ -289,53 +328,106 @@ function renderResult() {
   ].flat(Infinity).filter(Boolean));
 }
 
+function activitiesBlock(d) {
+  const list = d.scenario.activities || [];
+  return [
+    h("h2", { text: "Veiklos" }),
+    list.map((a, i) =>
+      h("div", { class: "activity" },
+        h("div", { class: "activity-head" },
+          h("span", { class: "activity-num", text: `${i + 1}.` }),
+          editable("h3", {}, a.title || "", (v) => { a.title = v; }),
+          h("button", { class: "swap", type: "button", text: "Kita", onclick: (e) => swap("activities", i, e.currentTarget) })
+        ),
+        editable("p", { class: "activity-desc" }, a.description || "", (v) => { a.description = v; }),
+        h("div", { class: "activity-meta" },
+          h("label", { class: "mini inline" },
+            h("input", {
+              type: "number", min: "0", max: "180", inputmode: "numeric", value: a.minutes || 0,
+              oninput: (e) => {
+                a.minutes = Math.max(0, Math.min(180, Number(e.target.value) || 0));
+                saveDraft();
+                updatePlanTotal();
+              },
+            }),
+            "min."
+          ),
+          h("span", { class: "hint", style: "margin:0" }, "Reikės: "),
+          editable("span", { class: "materials" }, a.materials || "—", (v) => { a.materials = v === "—" ? "" : v; })
+        )
+      )
+    ),
+  ];
+}
 async function swap(section, index, btn) {
   const d = state.draft;
+  const label = btn.textContent;
   btn.disabled = true;
   btn.textContent = "…";
   try {
-    const existing = SECTIONS.flatMap(([k]) => d.scenario[k] || []);
+    const isActivity = section === "activities";
+    const existing = isActivity
+      ? (d.scenario.activities || []).map((a) => a.title)
+      : SECTIONS.flatMap(([k]) => d.scenario[k] || []);
+    const current = isActivity ? d.scenario.activities[index].title : d.scenario[section][index];
     const data = await api("/api/generate", {
-      body: {
-        mode: "replace",
-        topic: d.topic,
-        depth: d.depth,
-        replace: { section, current: d.scenario[section][index], existing },
-      },
+      body: { mode: "replace", kind: kindOf(d), topic: d.topic, depth: d.depth, replace: { section, current, existing } },
     });
-    if (!data.question) throw new Error("Nepavyko gauti naujo klausimo");
-    d.scenario[section][index] = data.question;
+    if (isActivity) {
+      if (!data.activity || !data.activity.title) throw new Error("Nepavyko gauti naujos veiklos");
+      d.scenario.activities[index] = { ...data.activity, minutes: Number(data.activity.minutes) || 30 };
+    } else {
+      if (!data.question) throw new Error("Nepavyko gauti naujo klausimo");
+      d.scenario[section][index] = data.question;
+    }
     saveDraft();
     renderResult();
   } catch (e) {
     btn.disabled = false;
-    btn.textContent = "Kitas";
+    btn.textContent = label;
     alert(e.message);
   }
 }
+// Kiek minučių suplanuota (su įsižeminimu)
+function planMinutes(d) {
+  const t = d.timing || {};
+  let mins = GROUNDING.minutes;
+  if (kindOf(d) === "veikla") {
+    mins += (d.scenario.activities || []).reduce((sum, a) => sum + (Number(a.minutes) || 0), 0);
+    mins += (d.scenario.closing || []).length * (Number(t.closing) || 0);
+  } else {
+    mins += SECTIONS.reduce((sum, [k]) => sum + (d.scenario[k] || []).length * (Number(t[k]) || 0), 0);
+  }
+  return mins;
+}
+
+let updatePlanTotal = () => {};
 
 function timingCard() {
   const d = state.draft;
-  d.timing = d.timing || { ...DEFAULT_TIMING };
+  const veikla = kindOf(d) === "veikla";
+  d.timing = d.timing || { ...(veikla ? DEFAULT_ACTIVITY_TIMING : DEFAULT_TIMING) };
   const total = h("p", { class: "hint" });
-  const update = () => {
-    const mins = SECTIONS.reduce((sum, [k]) => sum + (d.scenario[k] || []).length * (Number(d.timing[k]) || 0), 0);
-    total.textContent = mins
-      ? `Iš viso klausimams apie ${fmtMinutes(mins)} Vedančiosios režime laikmatis švelniai primins, kada pereiti prie kito klausimo.`
-      : "Laikmatis išjungtas (visur 0 min.).";
+  updatePlanTotal = () => {
+    const mins = planMinutes(d);
+    const left = MEETING_MINUTES - mins;
+    total.textContent =
+      `Suplanuota ${fmtMinutes(mins)} iš 3 val. (${MEETING_START}–${endTime(MEETING_START)}), įskaitant ${GROUNDING.minutes} min. įsižeminimą. ` +
+      (left >= 0 ? `Laisvo laiko lieka ${fmtMinutes(left)}` : `Viršyta ${fmtMinutes(-left)}`);
+    total.classList.toggle("over-plan", left < 0);
   };
   const minutes = (key, label) =>
     h("label", { class: "mini" }, label,
       h("input", {
-        type: "number", min: "0", max: "60", inputmode: "numeric", value: d.timing[key],
+        type: "number", min: "0", max: "60", inputmode: "numeric", value: d.timing[key] ?? 0,
         oninput: (e) => {
           d.timing[key] = Math.max(0, Math.min(60, Number(e.target.value) || 0));
           saveDraft();
-          update();
+          updatePlanTotal();
         },
       })
     );
-  update();
+  updatePlanTotal();
   return h("div", { class: "card timing" },
     h("h2", { text: "Vakaro planas" }),
     h("div", { class: "row" },
@@ -343,12 +435,18 @@ function timingCard() {
         h("input", { type: "date", value: d.date || "", oninput: (e) => { d.date = e.target.value; saveDraft(); } })
       )
     ),
-    h("p", { class: "label", style: "margin-top:16px", text: "Minutės vienam klausimui" }),
-    h("div", { class: "row" }, minutes("warmup", "Apšilimas"), minutes("main", "Pagrindiniai"), minutes("closing", "Užbaigimas")),
+    veikla
+      ? [
+          h("p", { class: "hint", style: "margin-top:16px", text: "Veiklų trukmę keisk prie kiekvienos veiklos." }),
+          h("div", { class: "row", style: "margin-top:10px" }, minutes("closing", "Užbaigimo klausimui (min.)")),
+        ]
+      : [
+          h("p", { class: "label", style: "margin-top:16px", text: "Minutės vienam klausimui" }),
+          h("div", { class: "row" }, minutes("warmup", "Apšilimas"), minutes("main", "Pagrindiniai"), minutes("closing", "Užbaigimas")),
+        ],
     total
   );
 }
-
 function actionsBar() {
   const d = state.draft;
   const copy = h("button", { class: "secondary", type: "button", text: "Kopijuoti" });
@@ -387,9 +485,16 @@ function actionsBar() {
 function asText() {
   const d = state.draft;
   const lines = [`Tema: ${d.topic}`];
-  if (d.date) lines.push(`Data: ${fmtDate(d.date)}`);
-  lines.push("", d.scenario.intro || "");
-  for (const [key, title] of SECTIONS) {
+  if (d.date) lines.push(`Data: ${fmtDate(d.date)}, ${MEETING_START}–${endTime(MEETING_START)}`);
+  lines.push("", `Įsižeminimas (${GROUNDING.minutes} min.)`, "", d.scenario.intro || "");
+  if (kindOf(d) === "veikla") {
+    lines.push("", "Veiklos");
+    (d.scenario.activities || []).forEach((a, i) => {
+      lines.push(`${i + 1}. ${a.title} (${a.minutes || 0} min.)`, `   ${a.description}`);
+      if (a.materials) lines.push(`   Reikės: ${a.materials}`);
+    });
+  }
+  for (const [key, title] of sectionsFor(d)) {
     const list = d.scenario[key] || [];
     if (!list.length) continue;
     lines.push("", title);
@@ -397,7 +502,6 @@ function asText() {
   }
   return lines.join("\n");
 }
-
 async function saveToArchive(btn) {
   const d = state.draft;
   if (!d.date) {
@@ -410,7 +514,7 @@ async function saveToArchive(btn) {
   btn.textContent = "Saugoma…";
   try {
     const { item } = await api("/api/archive", {
-      body: { entry: { id: d.id, date: d.date, topic: d.topic, depth: d.depth, count: d.count, scenario: d.scenario, timing: d.timing } },
+      body: { entry: { id: d.id, kind: kindOf(d), date: d.date, topic: d.topic, depth: d.depth, count: d.count, scenario: d.scenario, timing: d.timing } },
     });
     const wasNew = !d.id;
     d.id = item.id;
@@ -441,7 +545,7 @@ function toggleInvite() {
   if (box.childElementCount) { box.replaceChildren(); return; }
   const d = state.draft;
   const m = state.meeting && state.meeting.date === d.date ? state.meeting : null;
-  const time = h("input", { type: "time", value: m?.time || "18:00" });
+  const time = h("input", { type: "time", value: m?.time || MEETING_START });
   const place = h("input", { type: "text", placeholder: "pvz., pas Rūtą, Vilniaus g. 5", value: m?.place || "" });
   const note = h("input", { type: "text", placeholder: "pvz., atsineškite po vaikystės nuotrauką" });
   const out = h("textarea", { rows: "8", hidden: true });
@@ -458,7 +562,18 @@ function toggleInvite() {
     go.textContent = "Rašoma…";
     try {
       const { message } = await api("/api/generate", {
-        body: { mode: "invite", topic: d.topic, date: d.date ? fmtDate(d.date) : "", time: time.value, place: place.value, note: note.value },
+        body: {
+          mode: "invite",
+          kind: kindOf(d),
+          topic: d.topic,
+          date: d.date ? fmtDate(d.date) : "",
+          time: time.value ? `${time.value}–${endTime(time.value)}` : "",
+          place: place.value,
+          note: note.value,
+          materials: kindOf(d) === "veikla"
+            ? (d.scenario.activities || []).map((a) => a.materials).filter(Boolean).join("; ")
+            : "",
+        },
       });
       out.value = message || "";
       out.hidden = false;
@@ -493,8 +608,20 @@ function openHost() {
   const d = state.draft;
   const s = d.scenario;
   const t = d.timing || {};
-  host.slides = [{ label: "Įžanga", text: s.intro || d.topic, min: 0, intro: true }];
-  for (const [key, title] of SECTIONS) {
+  host.slides = [
+    { label: "Įsižeminimas", text: GROUNDING.text, min: GROUNDING.minutes, intro: true },
+    { label: "Įžanga", text: s.intro || d.topic, min: 0, intro: true },
+  ];
+  if (kindOf(d) === "veikla") {
+    const acts = s.activities || [];
+    acts.forEach((a, i) => host.slides.push({
+      label: `Veikla · ${i + 1}/${acts.length}`,
+      text: a.title,
+      sub: [a.description, a.materials && `Reikės: ${a.materials}`].filter(Boolean).join("\n\n"),
+      min: Number(a.minutes) || 0,
+    }));
+  }
+  for (const [key, title] of sectionsFor(d)) {
     const list = s[key] || [];
     list.forEach((q, i) => host.slides.push({ label: `${title} · ${i + 1}/${list.length}`, text: q, min: Number(t[key]) || 0 }));
   }
@@ -510,7 +637,8 @@ function openHost() {
   el.label = h("span", { class: "host-label" });
   el.total = h("span", {});
   el.q = h("p", { class: "host-q" });
-  el.notice = h("div", { class: "host-notice", hidden: true, text: "Laikas pereiti prie kito klausimo" });
+  el.sub = h("p", { class: "host-sub" });
+  el.notice = h("div", { class: "host-notice", hidden: true, text: "Laikas pereiti toliau" });
   el.bar = h("span", {});
   el.barWrap = h("div", { class: "bar" }, el.bar);
   el.clock = h("span", { class: "clock" });
@@ -523,7 +651,7 @@ function openHost() {
       el.label, el.total,
       h("button", { class: "host-close", type: "button", "aria-label": "Uždaryti", text: "✕", onclick: closeHost })
     ),
-    h("div", { class: "host-body" }, el.q),
+    h("div", { class: "host-body" }, h("div", {}, el.q, el.sub)),
     el.notice,
     h("div", { class: "host-timer" }, el.barWrap, el.clock),
     h("div", { class: "host-nav" }, el.prev, el.pause, el.next)
@@ -590,6 +718,8 @@ function renderHost() {
   el.label.textContent = slide.label;
   el.q.textContent = slide.text;
   el.q.classList.toggle("intro-slide", Boolean(slide.intro));
+  el.sub.textContent = slide.sub || "";
+  el.sub.hidden = !slide.sub;
   el.prev.disabled = host.i === 0;
   el.next.textContent = host.i === host.slides.length - 1 ? "Pabaiga" : "Toliau →";
   renderClock();
@@ -695,27 +825,39 @@ function archiveCard(item) {
     return h("article", { class: "card item secret" },
       h("p", { class: "date", text: fmtDate(item.date) }),
       h("h3", { text: item.topic ? `📣 ${item.topic}` : "🤫 Tema – staigmena" }),
-      h("p", { class: "hint", text: `${item.host ? `Veda ${item.host}. ` : ""}${item.topic ? "Klausimai" : "Tema ir klausimai"} atsivers po susitikimo.` })
+      h("p", { class: "hint", text: `${item.host ? `Veda ${item.host}. ` : ""}${item.topic ? "Visa programa" : "Tema ir programa"} atsivers po susitikimo.` })
     );
   }
   const upcoming = item.date >= today();
   const depth = (DEPTHS.find(([v]) => v === item.depth) || [])[1];
+  const kindLabel = kindOf(item) === "veikla" ? "🎨 Veiklos" : "💬 Pokalbis";
+  const acts = item.scenario.activities || [];
   const details = h("div", { class: "details", hidden: true },
     item.scenario.intro ? h("p", { class: "hint", style: "font-style:italic", text: item.scenario.intro }) : null,
-    SECTIONS.map(([k, title]) => {
+    acts.length
+      ? [h("h3", { text: "Veiklos" }), h("ol", {}, acts.map((a) =>
+          h("li", { class: "plain" }, h("div", {},
+            h("strong", { text: `${a.title} (${a.minutes || 0} min.)` }),
+            h("p", { class: "hint", style: "margin:2px 0 0", text: a.description }),
+            a.materials ? h("p", { class: "hint", style: "margin:2px 0 0", text: `Reikės: ${a.materials}` }) : null
+          ))
+        ))]
+      : null,
+    sectionsFor(item).map(([k, title]) => {
       const list = item.scenario[k] || [];
       return list.length ? [h("h3", { text: title }), h("ol", {}, list.map((q) => h("li", { class: "plain", text: q })))] : null;
     })
   );
-  const toggle = h("button", { class: "secondary small", type: "button", text: "Klausimai" });
+  const toggleText = kindOf(item) === "veikla" ? "Veiklos" : "Klausimai";
+  const toggle = h("button", { class: "secondary small", type: "button", text: toggleText });
   toggle.onclick = () => {
     details.hidden = !details.hidden;
-    toggle.textContent = details.hidden ? "Klausimai" : "Slėpti";
+    toggle.textContent = details.hidden ? toggleText : "Slėpti";
   };
   return h("article", { class: "card item" },
     h("p", { class: "date", text: fmtDate(item.date) }),
     h("h3", { text: item.topic }),
-    h("p", { class: "hint", text: [depth, item.host && `išsaugojo ${item.host}`, upcoming && (item.revealed ? "📣 tema paskelbta narėms" : "🤫 kitoms dar paslaptis")].filter(Boolean).join(" · ") }),
+    h("p", { class: "hint", text: [kindLabel, depth, item.host && `išsaugojo ${item.host}`, upcoming && (item.revealed ? "📣 tema paskelbta narėms" : "🤫 kitoms dar paslaptis")].filter(Boolean).join(" · ") }),
     details,
     h("div", { class: "actions" },
       upcoming ? revealButton(item) : null,
@@ -941,7 +1083,7 @@ function renderAuth(root) {
   setMode(false);
 
   root.replaceChildren(...[
-    h("h1", { text: "Gentis" }),
+    h("h1", { text: "Genties susitikimas" }),
     h("p", { class: "lead", text: "Mūsų susitikimų planavimas: temos, klausimai ir kito susitikimo data." }),
     state.googleClientId ? googleCard(fail) : null,
     h("div", { class: "card" },
@@ -1150,7 +1292,7 @@ function drawCalendar() {
                     class: "secondary small",
                     type: "button",
                     text: "Paskirti",
-                    onclick: () => setMeeting({ date: d, time: cal.meeting?.time || "18:00", place: cal.meeting?.place || "" }),
+                    onclick: () => setMeeting({ date: d, time: cal.meeting?.time || MEETING_START, place: cal.meeting?.place || "" }),
                   })
             )
           ))
@@ -1205,6 +1347,10 @@ async function init() {
   renderChips();
   $("#code").value = state.code;
   $("#form").addEventListener("submit", generate);
+  $("#kinds").addEventListener("change", () => {
+    renderCounts(selectedKind());
+    $("#suggestions").hidden = true;
+  });
   $("#suggest").addEventListener("click", suggestTopics);
   $("#topic").addEventListener("input", checkTopicUsed);
 

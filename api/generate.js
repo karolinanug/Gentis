@@ -7,6 +7,7 @@
 //   CLAUDE_MODEL      – (nebūtina) modelis, numatytasis: claude-haiku-5-5
 //
 // Režimai (body.mode): scenario (numatytasis), replace, topics, invite.
+// Formatas (body.kind): pokalbis (numatytasis) arba veikla.
 
 const { checkAccess } = require("../lib/auth");
 const store = require("../lib/store");
@@ -36,6 +37,11 @@ function mainCount(value) {
   return Number.isFinite(n) ? Math.min(10, Math.max(3, n)) : 6;
 }
 
+function activityCount(value) {
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) ? Math.min(6, Math.max(1, n)) : 3;
+}
+
 function str(value, max) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
@@ -43,10 +49,12 @@ function str(value, max) {
 function systemPrompt() {
   return [
     "Tu padedi draugių būrelio „Gentis“ vedančiajai pasiruošti susitikimui.",
-    "Būrelis renkasi kas dvi savaites ir kalbasi viena iš anksto pasirinkta tema.",
+    "Būrelis renkasi kas dvi savaites 18:30–21:30 (3 valandos) ir kalbasi arba užsiima veiklomis viena iš anksto pasirinkta tema.",
+    "Kiekvienas susitikimas prasideda 3 minučių įsižeminimu.",
     "Rašai taisyklinga, gyva, šilta lietuvių kalba, kreipiesi į moteris.",
     "Klausimai turi būti atviri (ne taip/ne), konkretūs, skatinantys pasakoti istorijas.",
     "Venk banalybių ir kartojimosi. Kiekvienas klausimas – vienas sakinys, ne ilgesnis nei ~25 žodžiai.",
+    "Veiklos turi būti įgyvendinamos namuose ar jaukioje erdvėje 4–12 moterų grupei, su paprastomis, lengvai gaunamomis priemonėmis.",
     "Atsakyk TIK galiojančiu JSON, be jokio papildomo teksto ir be ``` žymų.",
   ].join(" ");
 }
@@ -67,6 +75,40 @@ Sukurk vakaro scenarijų tokiu JSON formatu:
 }`;
 }
 
+function activitiesPrompt(topic, depth, count, avoid) {
+  const avoidText = avoid.length
+    ? `\nŠia tema būrelis jau darė šias veiklas – nesiūlyk jų ir labai panašių: ${JSON.stringify(avoid)}.\n`
+    : "";
+  return `Tema: "${topic}".
+Tonas: ${tone(depth)}.
+${avoidText}
+Šį kartą susitikimas – ne pokalbis, o veiklų vakaras. Sukurk tiksliai ${count} veiklas (-ų), susijusias su tema.
+Visos veiklos kartu turi tilpti į maždaug 140 minučių (likęs laikas – įsižeminimui, įžangai, pertraukėlei ir užbaigimui).
+Veiklos turi būti įvairios (pvz., kūrybinė, judesio, žaidimo, refleksijos), ne vien pokalbiai.
+
+Atsakyk tokiu JSON formatu:
+{
+  "intro": "1–2 sakinių įžanga, kurią vedančioji galėtų perskaityti garsiai",
+  "activities": [
+    {
+      "title": "trumpas veiklos pavadinimas (2–5 žodžiai)",
+      "description": "2–4 sakiniai: kaip vedančioji praveda veiklą, žingsnis po žingsnio",
+      "minutes": 30,
+      "materials": "ko reikės (trumpai, kableliais) arba tuščia eilutė, jei nieko"
+    }
+  ],
+  "closing": ["1 užbaigimo klausimas, padedantis pasidalinti, ką kiekviena išsinešė iš veiklų"]
+}`;
+}
+
+function replaceActivityPrompt(topic, depth, current, existing) {
+  return `Tema: "${topic}". Tonas: ${tone(depth)}.
+Vedančiajai nepatiko ši veikla: "${current}".
+Jau numatytos veiklos (nekartok jų): ${JSON.stringify(existing || [])}.
+Pasiūlyk vieną naują, kitokią veiklą.
+Formatas: {"activity": {"title": "...", "description": "2–4 sakiniai, kaip pravesti", "minutes": 30, "materials": "..."}}`;
+}
+
 function replacePrompt(topic, depth, section, current, existing) {
   const names = { warmup: "apšilimo", main: "pagrindinis", closing: "užbaigimo" };
   return `Tema: "${topic}". Tonas: ${tone(depth)}.
@@ -75,21 +117,25 @@ Jau esami klausimai (nekartok jų): ${JSON.stringify(existing || [])}.
 Pasiūlyk vieną naują, kitokį klausimą. Formatas: {"question": "..."}`;
 }
 
-function topicsPrompt(past) {
+function topicsPrompt(past, kind) {
   const now = new Date();
   const pastText = past.length
     ? `Šiomis temomis būrelis jau kalbėjosi – nesiūlyk jų ir labai panašių: ${JSON.stringify(past)}.`
     : "";
   return `Šiandien ${MONTHS[now.getMonth()]} ${now.getDate()} d.
-Pasiūlyk 6 įvairias temas kitam būrelio susitikimui. Dalis gali būti susijusios su metų laiku ar artėjančiomis šventėmis Lietuvoje, kitos – visai nesusijusios.
+${kind === "veikla"
+    ? "Pasiūlyk 6 įvairias temas kitam būrelio VEIKLŲ vakarui (kūrybinėms, judesio, žaidimų ar kitoms bendroms veikloms, ne pokalbiui)."
+    : "Pasiūlyk 6 įvairias temas kitam būrelio susitikimui-pokalbiui."} Dalis gali būti susijusios su metų laiku ar artėjančiomis šventėmis Lietuvoje, kitos – visai nesusijusios.
 ${pastText}
-Tema – 1–4 žodžiai. Prie kiekvienos pridėk vieną trumpą sakinį, kodėl apie ją įdomu pasikalbėti.
+Tema – 1–4 žodžiai. Prie kiekvienos pridėk vieną trumpą sakinį, kodėl ji įdomi${kind === "veikla" ? " ir kokios veiklos galėtų būti" : ""}.
 Formatas: {"topics": [{"title": "...", "why": "..."}]}`;
 }
 
 function invitePrompt(topic, details) {
   const lines = [
     `Tema: "${topic}"`,
+    details.kind === "veikla" && "Tai veiklų vakaras (ne pokalbis) – kvietime tai paminėk",
+    details.materials && `Ko reikės veikloms (jei tinka, paprašyk atsinešti): ${details.materials}`,
     details.date && `Data: ${details.date}`,
     details.time && `Laikas: ${details.time}`,
     details.place && `Vieta: ${details.place}`,
@@ -145,11 +191,15 @@ module.exports = async (req, res) => {
   }
 
   let userContent;
+  const kind = body.kind === "veikla" ? "veikla" : "pokalbis";
+
   if (mode === "topics") {
-    const past = [...new Set((await archive()).map((i) => i.topic))].slice(0, 60);
-    userContent = topicsPrompt(past);
+    const past = [...new Set((await archive()).map((i) => i.topic).filter(Boolean))].slice(0, 60);
+    userContent = topicsPrompt(past, kind);
   } else if (mode === "invite") {
     userContent = invitePrompt(topic, {
+      kind,
+      materials: str(body.materials, 300),
       date: str(body.date, 60),
       time: str(body.time, 20),
       place: str(body.place, 120),
@@ -157,7 +207,15 @@ module.exports = async (req, res) => {
     });
   } else if (mode === "replace") {
     const r = body.replace || {};
-    userContent = replacePrompt(topic, body.depth, r.section, r.current, r.existing);
+    userContent = r.section === "activities"
+      ? replaceActivityPrompt(topic, body.depth, r.current, r.existing)
+      : replacePrompt(topic, body.depth, r.section, r.current, r.existing);
+  } else if (kind === "veikla") {
+    const avoid = (await archive())
+      .filter((i) => typeof i.topic === "string" && sameTopic(i.topic, topic))
+      .flatMap((i) => ((i.scenario && i.scenario.activities) || []).map((a) => a.title))
+      .slice(0, 40);
+    userContent = activitiesPrompt(topic, body.depth, activityCount(body.count), avoid);
   } else {
     const avoid = (await archive())
       .filter((i) => typeof i.topic === "string" && sameTopic(i.topic, topic))

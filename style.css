@@ -151,6 +151,16 @@ li::before { content: counter(q) "."; color: var(--accent); font-weight: 600; }
 }
 .swap:hover { color: var(--accent); border-color: var(--accent); }
 .timing { margin-top: 28px; }
+.over-plan { color: var(--error); }
+.activity { border-bottom: 1px solid var(--line); padding: 14px 0; }
+.activity-head { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: start; }
+.activity-num { color: var(--accent); font-weight: 600; }
+.activity-head h3 { font-size: 1.05rem; }
+.activity-desc { margin: 6px 0 8px 38px; }
+.activity-meta { margin-left: 38px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: .9rem; }
+.activity-meta .materials { color: var(--muted); flex: 1 1 160px; }
+.mini.inline { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+.mini.inline input { width: 72px; margin: 0; padding: 6px 8px; }
 
 /* Archyvas */
 .item .date { color: var(--accent); font-weight: 600; font-size: .85rem; margin: 0 0 2px; }
@@ -238,6 +248,7 @@ li::before { content: counter(q) "."; color: var(--accent); font-weight: 600; }
   margin: 0;
 }
 .host-q.intro-slide { font-style: italic; }
+.host-sub { white-space: pre-line; text-align: center; color: var(--muted); font-size: clamp(1rem, 3.5vw, 1.3rem); max-width: 760px; margin: 18px auto 0; }
 .host-notice {
   background: var(--accent-soft);
   color: var(--accent);
