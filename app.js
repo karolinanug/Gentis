@@ -62,7 +62,7 @@ const GROUNDING = {
   minutes: 3,
   text: "Atsisėskime patogiai ir užsimerkime. Giliai įkvėpkime per nosį ir lėtai iškvėpkime – tris kartus. Pajuskime, kaip pėdos remiasi į žemę, ir palikime dienos rūpesčius už durų.",
 };
-const MONTHS_SHORT = ["sau", "vas", "kov", "bal", "geg", "bir", "lie", "rgp", "rgs", "spa", "lap", "gru"];
+const MONTHS_FULL = ["Sausis", "Vasaris", "Kovas", "Balandis", "Gegužė", "Birželis", "Liepa", "Rugpjūtis", "Rugsėjis", "Spalis", "Lapkritis", "Gruodis"];
 const SECTIONS = [
   ["warmup", "Apšilimas"],
   ["main", "Pagrindiniai klausimai"],
@@ -1301,15 +1301,15 @@ function drawCalendar() {
     for (const d of dates) if (d > after) (byDate[d] = byDate[d] || []).push(id);
   }
 
-  const start = new Date();
-  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  // Mėnesio vaizdas: šis mėnuo ir dar 3 į priekį
+  const offset = state.calMonth || 0;
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const lead = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
   const days = [];
-  for (let i = 0; i < 56; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    days.push(d);
-  }
-  const max = Math.max(0, ...days.map((d) => (byDate[isoDate(d)] || []).length));
+  for (let n = 1; n <= daysInMonth; n++) days.push(new Date(first.getFullYear(), first.getMonth(), n));
+  const max = Math.max(0, ...days.filter((d) => isoDate(d) >= t).map((d) => (byDate[isoDate(d)] || []).length));
 
   const toggle = (iso) => {
     if (mine.has(iso)) mine.delete(iso); else mine.add(iso);
@@ -1319,26 +1319,40 @@ function drawCalendar() {
     scheduleSave();
   };
 
-  const cells = days.map((d, i) => {
+  const go = (delta) => { state.calMonth = Math.max(0, Math.min(3, offset + delta)); drawCalendar(); };
+  const monthHead = h("div", { class: "cal-head" },
+    h("button", { type: "button", class: "cal-nav", "aria-label": "Ankstesnis mėnuo", text: "‹", disabled: offset <= 0, onclick: () => go(-1) }),
+    h("strong", { text: `${MONTHS_FULL[first.getMonth()]} ${first.getFullYear()}` }),
+    h("button", { type: "button", class: "cal-nav", "aria-label": "Kitas mėnuo", text: "›", disabled: offset >= 3, onclick: () => go(1) })
+  );
+
+  const blanks = Array.from({ length: lead }, () => h("span", { class: "day blank" }));
+  const cells = blanks.concat(days.map((d) => {
     const iso = isoDate(d);
     const count = (byDate[iso] || []).length;
     const past = iso < t;
-    const showMonth = i === 0 || d.getDate() === 1;
-    const cls = ["day", mine.has(iso) && "mine", !past && max > 0 && count === max && "best", cal.meeting?.date === iso && "meeting"]
-      .filter(Boolean).join(" ");
+    const cls = [
+      "day",
+      mine.has(iso) && "mine",
+      iso === t && "today",
+      !past && max > 0 && count === max && "best",
+      cal.meeting?.date === iso && "meeting",
+    ].filter(Boolean).join(" ");
     return h("button", {
       type: "button",
       class: cls,
       disabled: past,
       "aria-pressed": String(mine.has(iso)),
       "aria-label": `${fmtDate(iso)}: gali ${count}`,
+      title: count ? (byDate[iso] || []).map(nameOf).join(", ") : "",
       onclick: () => toggle(iso),
     },
-      showMonth ? h("span", { class: "m", text: MONTHS_SHORT[d.getMonth()] }) : null,
       h("span", { class: "n", text: String(d.getDate()) }),
-      count ? h("span", { class: "c", text: String(count) }) : null
+      h("span", { class: "dots" },
+        count > 5 ? h("span", { class: "dots-n", text: String(count) }) : Array.from({ length: count }, () => h("i", {}))
+      )
     );
-  });
+  }));
 
   const ranked = Object.entries(byDate)
     .filter(([d]) => d >= t)
@@ -1362,7 +1376,8 @@ function drawCalendar() {
     meetingCard(cal),
     h("div", { class: "card" },
       h("h2", { text: "Kada gali?" }),
-      h("p", { class: "hint", style: "margin:0 0 12px", text: `Spustelk dienas, kai gali ateiti (${MEETING_START}–${endTime(MEETING_START)}). Skaičius rodo, kiek narių tą dieną gali.` }),
+      h("p", { class: "hint", style: "margin:0 0 12px", text: `Spustelk dienas, kai gali ateiti (${MEETING_START}–${endTime(MEETING_START)}). Taškeliai po data rodo, kiek narių tą dieną gali.` }),
+      monthHead,
       h("div", { class: "cal" },
         ["Pr", "An", "Tr", "Kt", "Pn", "Še", "Sk"].map((w) => h("span", { class: "wd", text: w })),
         cells
@@ -1370,7 +1385,8 @@ function drawCalendar() {
       h("p", { class: "legend" },
         h("span", {}, h("i", { class: "l-mine" }), "tu gali"),
         h("span", {}, h("i", { class: "l-best" }), "tinka daugiausiai"),
-        h("span", { text: "★ paskirtas susitikimas" })
+        h("span", {}, h("b", { class: "l-dot" }), "viena narė"),
+        h("span", { text: "★ susitikimas" })
       ),
       h("p", { class: "status", id: "cal-status", text: state.calStatus })
     ),
