@@ -27,8 +27,12 @@ module.exports = async (req, res) => {
       if (existing) {
         const user = store.parse(await store.cmd("HGET", "users", existing));
         if (user) {
+          if (g.picture && user.picture !== g.picture) {
+            user.picture = g.picture; // nuotrauka atnaujinama kiekvieną kartą prisijungus
+            await store.cmd("HSET", "users", existing, JSON.stringify(user));
+          }
           const token = await auth.createSession(existing);
-          return res.status(200).json({ token, user: { id: existing, name: user.name, google: true } });
+          return res.status(200).json({ token, user: { id: existing, name: user.name, google: true, picture: user.picture || "" } });
         }
       }
 
@@ -36,7 +40,7 @@ module.exports = async (req, res) => {
       if (!code) return res.status(200).json({ needsSignup: true, suggestedName: g.name });
       if (!auth.codeOk(code)) return res.status(401).json({ error: "Neteisingas genties kodas" });
       if (badName) return res.status(400).json({ error: "Vardas turi būti 2–40 simbolių" });
-      const record = JSON.stringify({ name: cleanName, google: g.sub, email: g.email });
+      const record = JSON.stringify({ name: cleanName, google: g.sub, email: g.email, picture: g.picture });
       const created = await store.cmd("HSETNX", "users", id, record);
       if (!created) {
         return res.status(409).json({
@@ -45,7 +49,7 @@ module.exports = async (req, res) => {
       }
       await store.cmd("HSET", "google", g.sub, id);
       const token = await auth.createSession(id);
-      return res.status(200).json({ token, user: { id, name: cleanName, google: true } });
+      return res.status(200).json({ token, user: { id, name: cleanName, google: true, picture: g.picture } });
     }
 
     if (action === "link-google") {
@@ -60,10 +64,11 @@ module.exports = async (req, res) => {
       const user = store.parse(await store.cmd("HGET", "users", me.id)) || { name: me.name };
       if (user.google && user.google !== g.sub) await store.cmd("HDEL", "google", user.google);
       user.google = g.sub;
-      user.email = g.email;
+      user.email = user.email || g.email;
+      if (g.picture) user.picture = g.picture;
       await store.cmd("HSET", "users", me.id, JSON.stringify(user));
       await store.cmd("HSET", "google", g.sub, me.id);
-      return res.status(200).json({ user: { ...me, google: true } });
+      return res.status(200).json({ user: { ...me, google: true, picture: user.picture || "" } });
     }
 
     if (action === "me") {

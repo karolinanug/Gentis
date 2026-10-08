@@ -17,6 +17,20 @@ function h(tag, props = {}, ...kids) {
   return el;
 }
 
+// Narės ratukas: Google nuotrauka arba pirmoji vardo raidė
+const AVATAR_COLORS = ["#b5654a", "#7a8f5a", "#5f7fa3", "#a3708f", "#c08a3e", "#6f8f8a"];
+function avatar(name, picture, size = 36) {
+  const letter = (name || "?").trim().charAt(0).toUpperCase();
+  const color = AVATAR_COLORS[[...(name || "")].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_COLORS.length];
+  const el = h("span", { class: "avatar", style: `width:${size}px;height:${size}px;font-size:${Math.round(size * 0.42)}px;background:${color}`, title: name || "" }, letter);
+  if (picture) {
+    const img = h("img", { src: picture, alt: "", referrerpolicy: "no-referrer", loading: "lazy" });
+    img.onerror = () => img.remove();
+    el.append(img);
+  }
+  return el;
+}
+
 const ls = {
   get(k) {
     try { return localStorage.getItem(k); } catch (e) { return null; }
@@ -1218,15 +1232,21 @@ function rotationCard(cal) {
   const scheduled = r.order[r.next];
   const host = r.nextHost;
   const swapped = host && host.toLowerCase() !== scheduled.toLowerCase();
+  const n = r.order.length;
+  // Rodoma nuo tos, kuri veda kitą, toliau ratu
+  const items = r.order.map((name, i) => ({ name, i, pos: (i - r.next + n) % n })).sort((a, b) => a.pos - b.pos);
   return h("div", { class: "card" },
     h("h2", { text: "Vedančiųjų eilė" }),
-    h("ol", { class: "rotation" }, r.order.map((name, i) =>
-      h("li", { class: [i === r.next && "current", !r.registered[i] && "unregistered"].filter(Boolean).join(" ") },
-        h("span", { text: name }),
-        i === r.next ? h("small", { text: swapped ? `vietoj jos veda ${host}` : "veda kitą" }) : null,
-        !r.registered[i] ? h("small", { text: "neturi paskyros" }) : null
+    h("ol", { class: "rot" }, items.map(({ name, i, pos }) =>
+      h("li", { class: ["rot-item", pos === 0 && "current", !r.registered[i] && "unregistered"].filter(Boolean).join(" "), title: r.registered[i] ? name : `${name} – dar neturi paskyros` },
+        h("span", { class: "rot-avatar" },
+          avatar(name, r.pictures ? r.pictures[i] : "", pos === 0 ? 56 : 44),
+          h("span", { class: "rot-num", text: String(pos + 1) })
+        ),
+        h("span", { class: "rot-name", text: name })
       )
     )),
+    swapped ? h("p", { class: "hint", style: "text-align:center", text: `Šį kartą vietoj ${scheduled} veda ${host}.` }) : null,
     h("div", { class: "row", style: "margin-top:14px;align-items:end" },
       h("label", { class: "mini" }, "Kitą susitikimą veda",
         hostSelect(cal, host, (name) => {
@@ -1397,6 +1417,10 @@ function drawCalendar() {
         ? h("ol", { class: "best-list" }, ranked.map(([d, ids]) =>
             h("li", {},
               h("div", {},
+                h("span", { class: "stack" }, ids.map((id) => {
+                  const m = members.find((x) => x.id === id) || {};
+                  return avatar(m.name || id, m.picture, 24);
+                })),
                 h("strong", { text: fmtDate(d) }),
                 h("p", { class: "hint", style: "margin:2px 0 0", text: `${ids.length} iš ${Math.max(order.length, ids.length)}: ${ids.map(nameOf).join(", ")}` })
               ),
@@ -1421,6 +1445,7 @@ function drawCalendar() {
 
 function renderUserBar() {
   $("#userbar").replaceChildren(...[
+    avatar(state.me.name, state.me.picture, 26),
     h("span", { text: state.me.name }),
     state.googleClientId && !state.me.google
       ? h("button", { class: "link", type: "button", text: "Susieti su Google", onclick: showLinkGoogle })

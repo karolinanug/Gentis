@@ -113,7 +113,7 @@ function autoMeeting(rotation, users, availability, today) {
 
 function view(rotation, users, availability, meeting, user) {
   const members = Object.entries(users)
-    .map(([id, u]) => ({ id, name: u.name || id }))
+    .map(([id, u]) => ({ id, name: u.name || id, picture: u.picture || "" }))
     .sort((a, b) => a.name.localeCompare(b.name, "lt"));
   return {
     members,
@@ -128,6 +128,7 @@ function view(rotation, users, availability, meeting, user) {
       nextHost: meeting ? meeting.host : hostOf(rotation),
       lastDate: rotation.lastDate,
       registered: rotation.order.map((n) => Boolean(users[key(n)])),
+      pictures: rotation.order.map((n) => (users[key(n)] && users[key(n)].picture) || ""),
     },
   };
 }
