@@ -1398,7 +1398,7 @@ function drawCalendar() {
             h("li", {},
               h("div", {},
                 h("strong", { text: fmtDate(d) }),
-                h("p", { class: "hint", style: "margin:2px 0 0", text: `${ids.length} iš ${members.length}: ${ids.map(nameOf).join(", ")}` })
+                h("p", { class: "hint", style: "margin:2px 0 0", text: `${ids.length} iš ${Math.max(order.length, ids.length)}: ${ids.map(nameOf).join(", ")}` })
               ),
               cal.meeting?.date === d
                 ? h("span", { class: "hint", text: "★ Paskirta" })
