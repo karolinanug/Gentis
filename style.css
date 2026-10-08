@@ -248,8 +248,15 @@ li::before { content: counter(q) "."; color: var(--accent); font-weight: 600; }
 .host-nav button { padding: 16px; font-size: 1rem; }
 .host-nav .next { background: var(--accent); color: #fff; }
 
+.doc a { color: var(--accent); }
+.doc ul { padding-left: 20px; }
+.doc li { display: list-item; border: 0; padding: 4px 0; }
+.doc li::before { content: none; }
+.site-foot { text-align: center; margin-top: 48px; font-size: .85rem; }
+.site-foot a { color: var(--muted); }
+
 @media print {
   body { background: #fff; color: #000; }
-  .top, #form, .timing, .actions, #invite, .hint, .swap { display: none !important; }
+  .top, .site-foot, #form, .timing, .actions, #invite, .hint, .swap { display: none !important; }
   #result { margin: 0; }
 }
