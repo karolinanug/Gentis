@@ -472,3 +472,4 @@ select.host-select, input[type=email] {
 .primary-link { display: inline-block; padding: 14px 22px; border-radius: 10px; background: var(--accent); color: #fff !important; text-decoration: none; font-weight: 600; }
 .auth-help { text-align: center; margin: 0 0 16px; }
 .auth-help a { color: var(--accent); font-weight: 500; }
+.confirm-date { margin-top: 14px; }

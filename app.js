@@ -1770,6 +1770,22 @@ function meetingCard(cal) {
   );
 }
 
+// Vienas mygtukas: patvirtina daugiausiai balsų surinkusią dieną
+function confirmDateButton(ranked, total) {
+  const [best, ids] = ranked[0];
+  const tied = ranked.filter(([, x]) => x.length === ids.length).length > 1;
+  return h("button", {
+    class: "primary small confirm-date",
+    type: "button",
+    onclick: () => {
+      const question = `Tvirtinti susitikimo datą – ${fmtDate(best)}? (gali ${ids.length} iš ${Math.max(total, ids.length)})` +
+        (tied ? "\n\nKelios dienos surinko po lygiai balsų – siūloma ankstesnė iš jų." : "") +
+        "\n\nVedančiajai bus išsiųstas laiškas.";
+      if (confirm(question)) setMeeting({ date: best, time: MEETING_START, place: "" });
+    },
+  }, icon("check"), "Tvirtinti susitikimo datą");
+}
+
 function drawCalendar() {
   renderNextBanner();
   const cal = state.calendar;
@@ -1855,7 +1871,7 @@ function drawCalendar() {
     : missing.length
       ? `Atsakė ${order.length - missing.length} iš ${order.length}. Dar laukiama: ${missing.join(", ")}.`
       : tie
-        ? "Visos pasižymėjo, bet kelios dienos surinko po lygiai balsų – paskirkite vieną iš jų ranka."
+        ? "Visos pasižymėjo, bet kelios dienos surinko po lygiai balsų – patvirtinkite datą mygtuku apačioje."
         : null;
 
   $("#tab-kalendorius").replaceChildren(...[
@@ -1904,17 +1920,11 @@ function drawCalendar() {
                 h("strong", { text: fmtDate(d) }),
                 h("p", { class: "hint", style: "margin:2px 0 0", text: `${ids.length} iš ${Math.max(order.length, ids.length)}: ${ids.map(nameOf).join(", ")}` })
               ),
-              cal.meeting?.date === d
-                ? h("span", { class: "hint" }, icon("check"), "Paskirta")
-                : h("button", {
-                    class: "secondary small",
-                    type: "button",
-                    text: "Paskirti",
-                    onclick: () => setMeeting({ date: d, time: cal.meeting?.time || MEETING_START, place: cal.meeting?.place || "" }),
-                  })
+              cal.meeting?.date === d ? h("span", { class: "hint" }, icon("check"), "Patvirtinta") : null
             )
           ))
-        : h("p", { class: "hint", style: "margin:0", text: "Dar niekas nepasižymėjo." })
+        : h("p", { class: "hint", style: "margin:0", text: "Dar niekas nepasižymėjo." }),
+      !cal.meeting && ranked.length ? confirmDateButton(ranked, order.length) : null
     ),
     rotationCard(cal),
     emailCard(cal),
