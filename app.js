@@ -340,12 +340,13 @@ function actionsBar() {
     }
     setTimeout(() => (copy.textContent = "Kopijuoti"), 2000);
   };
-  const save = h("button", { class: "secondary", type: "button", text: d.id ? "Atnaujinti archyve" : "Išsaugoti archyve" });
+  const save = h("button", { class: "secondary save-btn", type: "button", text: d.id ? "Atnaujinti archyve" : "Išsaugoti archyve" });
   save.onclick = () => saveToArchive(save);
   return h("div", { class: "actions" },
     h("button", { class: "primary small", type: "button", text: "▶ Vedančiosios režimas", onclick: openHost }),
     h("button", { class: "secondary", type: "button", text: "✉ Kvietimo žinutė", onclick: toggleInvite }),
     save,
+    d.id && d.date && d.date >= today() ? revealButton(d) : null,
     copy,
     h("button", { class: "secondary", type: "button", text: "Spausdinti", onclick: () => window.print() })
   );
@@ -373,8 +374,15 @@ async function saveToArchive(btn) {
     const { item } = await api("/api/archive", {
       body: { entry: { id: d.id, date: d.date, topic: d.topic, depth: d.depth, count: d.count, scenario: d.scenario, timing: d.timing } },
     });
+    const wasNew = !d.id;
     d.id = item.id;
+    d.revealed = item.revealed;
     saveDraft();
+    if (wasNew) {
+      // atsiranda mygtukas „Paskelbti temą narėms“
+      renderResult();
+      btn = $("#result .save-btn");
+    }
     if (state.archive) {
       state.archive = [item, ...state.archive.filter((i) => i.id !== item.id)];
     }
@@ -645,8 +653,8 @@ function archiveCard(item) {
   if (item.hidden) {
     return h("article", { class: "card item secret" },
       h("p", { class: "date", text: fmtDate(item.date) }),
-      h("h3", { text: "🤫 Tema – staigmena" }),
-      h("p", { class: "hint", text: `${item.host ? `Veda ${item.host}. ` : ""}Tema ir klausimai atsivers po susitikimo.` })
+      h("h3", { text: item.topic ? `📣 ${item.topic}` : "🤫 Tema – staigmena" }),
+      h("p", { class: "hint", text: `${item.host ? `Veda ${item.host}. ` : ""}${item.topic ? "Klausimai" : "Tema ir klausimai"} atsivers po susitikimo.` })
     );
   }
   const upcoming = item.date >= today();
@@ -666,14 +674,41 @@ function archiveCard(item) {
   return h("article", { class: "card item" },
     h("p", { class: "date", text: fmtDate(item.date) }),
     h("h3", { text: item.topic }),
-    h("p", { class: "hint", text: [depth, item.host && `išsaugojo ${item.host}`, upcoming && "🤫 kitoms dar paslaptis"].filter(Boolean).join(" · ") }),
+    h("p", { class: "hint", text: [depth, item.host && `išsaugojo ${item.host}`, upcoming && (item.revealed ? "📣 tema paskelbta narėms" : "🤫 kitoms dar paslaptis")].filter(Boolean).join(" · ") }),
     details,
     h("div", { class: "actions" },
+      upcoming ? revealButton(item) : null,
       toggle,
       h("button", { class: "secondary small", type: "button", text: "Atidaryti", onclick: () => openArchived(item) }),
       h("button", { class: "secondary small", type: "button", text: "Ištrinti", onclick: () => deleteArchived(item) })
     )
   );
+}
+
+function revealButton(item) {
+  const btn = h("button", {
+    class: item.revealed ? "secondary small" : "primary small",
+    type: "button",
+    text: item.revealed ? "Vėl paslėpti temą" : "📣 Paskelbti temą narėms",
+  });
+  btn.onclick = async () => {
+    const reveal = !item.revealed;
+    const question = reveal
+      ? `Paskelbti temą „${item.topic}“ kitoms narėms? Klausimai liks paslėpti iki susitikimo.`
+      : "Vėl paslėpti temą nuo kitų narių?";
+    if (!confirm(question)) return;
+    btn.disabled = true;
+    try {
+      const { item: saved } = await api("/api/archive", { body: { reveal: { id: item.id, revealed: reveal } } });
+      if (state.archive) state.archive = state.archive.map((i) => (i.id === saved.id ? saved : i));
+      if (state.draft && state.draft.id === saved.id) { state.draft.revealed = saved.revealed; saveDraft(); renderResult(); }
+      if (!$("#tab-archyvas").hidden) renderArchive();
+    } catch (e) {
+      btn.disabled = false;
+      alert(e.message);
+    }
+  };
+  return btn;
 }
 
 function openArchived(item) {

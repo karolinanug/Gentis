@@ -1,8 +1,10 @@
 // Buvusių susitikimų archyvas.
-// Būsimo susitikimo tema – staigmena: ją mato tik išsaugojusi narė,
-// kitoms ji atsiveria kitą dieną po susitikimo.
-//   GET              – visi įrašai (būsimų svetimų – be temos ir klausimų)
-//   POST {entry}     – išsaugoti naują arba atnaujinti (jei yra entry.id)
+// Būsimo susitikimo tema – staigmena: ją mato tik išsaugojusi narė.
+// Kai vedančioji paskelbia temą, kitos mato jos pavadinimą;
+// klausimai visoms atsiveria kitą dieną po susitikimo.
+//   GET                          – visi įrašai (būsimų svetimų – be klausimų)
+//   POST {entry}                 – išsaugoti naują arba atnaujinti (jei yra entry.id)
+//   POST {reveal: {id, revealed}} – paskelbti temą narėms arba vėl paslėpti
 //   DELETE ?id=...   – ištrinti
 
 const crypto = require("crypto");
@@ -28,7 +30,12 @@ function isVisible(item, user, today) {
 }
 
 function masked(item) {
-  return { id: item.id, date: item.date, host: item.host, hidden: true };
+  const out = { id: item.id, date: item.date, host: item.host, hidden: true };
+  if (item.revealed) {
+    out.topic = item.topic;
+    out.revealed = true;
+  }
+  return out;
 }
 
 module.exports = async (req, res) => {
@@ -42,6 +49,18 @@ module.exports = async (req, res) => {
       const items = (await store.archiveItems()).map((i) => (isVisible(i, access.user, today) ? i : masked(i)));
       items.sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.savedAt || 0) - (a.savedAt || 0));
       return res.status(200).json({ items });
+    }
+
+    if (req.method === "POST" && req.body && req.body.reveal) {
+      const { id, revealed } = req.body.reveal;
+      const item = typeof id === "string" && /^[a-f0-9]{16}$/.test(id) && store.parse(await store.cmd("HGET", "archive", id));
+      if (!item) return res.status(404).json({ error: "Įrašas nerastas" });
+      if (!isOwner(item, access.user)) {
+        return res.status(403).json({ error: "Temą gali paskelbti tik ją išsaugojusi vedančioji" });
+      }
+      item.revealed = Boolean(revealed);
+      await store.cmd("HSET", "archive", id, JSON.stringify(item));
+      return res.status(200).json({ item });
     }
 
     if (req.method === "POST") {
@@ -77,6 +96,7 @@ module.exports = async (req, res) => {
         },
         host: (old && old.host) || (access.user && access.user.name) || "",
         hostId: (old && old.hostId) || (access.user && access.user.id) || "",
+        revealed: Boolean(old && old.revealed),
         savedAt: Date.now(),
       };
       await store.cmd("HSET", "archive", id, JSON.stringify(item));
