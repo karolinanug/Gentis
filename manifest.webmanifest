@@ -1,0 +1,16 @@
+{
+  "name": "Genties susitikimas",
+  "short_name": "Gentis",
+  "description": "Mūsų susitikimų planavimas: temos, klausimai ir kito susitikimo data.",
+  "lang": "lt",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f1ea",
+  "theme_color": "#b5654a",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -59,9 +59,9 @@ const DEPTHS = [
   ["vidutinis", "Vidutinis"],
   ["gilus", "Gilus"],
   ["nostalgiskas", "Nostalgiškas"],
-  ["juokingas", "Juokingas"],
-  ["svajingas", "Svajingas"],
 ];
+// Seni tonai (archyve) – kaip juos rodyti
+const OLD_DEPTHS = { juokingas: "Juokingas", svajingas: "Svajingas" };
 const KINDS = [
   ["pokalbis", "💬 Pokalbis"],
   ["veikla", "🎨 Veiklos"],
@@ -180,7 +180,8 @@ function chipGroup(root, name, options, selected) {
 function renderChips() {
   const kind = kindOf(state.draft);
   chipGroup($("#kinds"), "kind", KINDS, kind);
-  chipGroup($("#depths"), "depth", DEPTHS, state.draft?.depth || "vidutinis");
+  const depth = DEPTHS.some(([v]) => v === state.draft?.depth) ? state.draft.depth : "vidutinis";
+  chipGroup($("#depths"), "depth", DEPTHS, depth);
   renderCounts(kind, state.draft?.count);
 }
 
@@ -943,7 +944,7 @@ function archiveCard(item) {
       h("p", { class: "hint", text: `${item.host ? `Veda ${item.host}. ` : ""}${item.topic ? "Visa programa" : "Tema ir programa"} atsivers po susitikimo.` })
     );
   }
-  const depth = (DEPTHS.find(([v]) => v === item.depth) || [])[1];
+  const depth = (DEPTHS.find(([v]) => v === item.depth) || [])[1] || OLD_DEPTHS[item.depth];
   const kindLabel = kindOf(item) === "veikla" ? "🎨 Veiklos" : "💬 Pokalbis";
   const acts = item.scenario.activities || [];
   const details = h("div", { class: "details", hidden: true },
@@ -1389,17 +1390,23 @@ function emailCard(cal) {
     try {
       const r = await api("/api/auth", { body: { action: "set-email", email: input.value } });
       cal.myEmail = r.email;
-      note.textContent = "Išsaugota ✓";
+      state.editEmail = false;
+      drawCalendar();
     } catch (e) {
       note.textContent = e.message;
     }
   };
+  if (cal.myEmail && !state.editEmail) {
+    return h("p", { class: "hint email-line" },
+      `✉ Pranešimai siunčiami: ${cal.myEmail} · `,
+      h("button", { class: "link", type: "button", text: "keisti", onclick: () => { state.editEmail = true; drawCalendar(); } })
+    );
+  }
   return h("div", { class: "card" },
     h("h2", { text: "Pranešimai el. paštu" }),
     h("p", { class: "hint", style: "margin:0 0 12px", text: "Kai būsi vedančioji, čia gausi laišką su patvirtinta susitikimo data." }),
     h("div", { class: "row", style: "align-items:end" }, h("label", { class: "mini" }, "Tavo el. paštas", input), h("div", { style: "flex:0 0 auto" }, save)),
-    note,
-    cal.mailEnabled ? null : h("p", { class: "hint", text: "(Laiškų siuntimas dar neįjungtas serveryje.)" })
+    note
   );
 }
 
@@ -1643,3 +1650,7 @@ async function init() {
 }
 
 init();
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+}

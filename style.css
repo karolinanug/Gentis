@@ -171,6 +171,8 @@ li::before { content: counter(q) "."; color: var(--accent); font-weight: 600; }
 .actions.subtle { justify-content: space-between; margin-top: 16px; }
 .invite-box { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
 .notice { text-align: center; font-weight: 500; }
+.email-line { text-align: center; margin: 4px 0 20px; }
+.email-line .link { font-size: inherit; }
 /* Katinėlis */
 .cat-loader { margin-top: 4px; }
 .cat-text { margin: 0 0 6px; font-weight: 600; color: var(--accent); }
