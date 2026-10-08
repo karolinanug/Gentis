@@ -68,7 +68,7 @@ const KINDS = [
 ];
 const COUNTS = { pokalbis: [4, 6, 8, 10], veikla: [2, 3, 4, 5] };
 const DEFAULT_COUNT = { pokalbis: 6, veikla: 3 };
-const COUNT_LABEL = { pokalbis: "Pagrindinių klausimų skaičius", veikla: "Veiklų skaičius" };
+const COUNT_LABEL = { pokalbis: "Klausimų skaičius", veikla: "Veiklų skaičius" };
 // Susitikimai visada 18:30–21:30
 const MEETING_START = "18:30";
 const MEETING_MINUTES = 180;
@@ -76,18 +76,37 @@ const GROUNDING = {
   minutes: 3,
   text: "Atsisėskime patogiai ir užsimerkime. Giliai įkvėpkime per nosį ir lėtai iškvėpkime – tris kartus. Pajuskime, kaip pėdos remiasi į žemę, ir palikime dienos rūpesčius už durų.",
 };
+// Kiekvieno susitikimo pradžia: įsižeminimas ir du pasisakymų ratai
+const ROUNDS = [
+  { key: "round1", questions: ["Kaip šiandien jaučiuosi?", "Kas įvyko nuo praeito susitikimo?", "Ko tikiuosi iš šiandienos susitikimo?"], minutes: 20 },
+  { key: "round2", questions: ["Jei dirbčiau vidinį darbą, kokia tema kalbėčiau?"], minutes: 10 },
+];
 const MONTHS_FULL = ["Sausis", "Vasaris", "Kovas", "Balandis", "Gegužė", "Birželis", "Liepa", "Rugpjūtis", "Rugsėjis", "Spalis", "Lapkritis", "Gruodis"];
+// Seni scenarijai turėjo apšilimą ir užbaigimą; dabar klausimai – viename sąraše („main“)
 const SECTIONS = [
   ["warmup", "Apšilimas"],
-  ["main", "Pagrindiniai klausimai"],
+  ["main", "Klausimai"],
   ["closing", "Užbaigimas"],
 ];
-const DEFAULT_TIMING = { warmup: 5, main: 10, closing: 5 };
-const DEFAULT_ACTIVITY_TIMING = { closing: 10 };
+const DEFAULT_TIMING = { main: 10, round1: 20, round2: 10 };
+const DEFAULT_ACTIVITY_TIMING = { closing: 10, round1: 20, round2: 10 };
+const roundMinutes = (d, r) => (d.timing && d.timing[r.key] != null ? Number(d.timing[r.key]) || 0 : r.minutes);
 
 const kindOf = (d) => (d && d.kind === "veikla" ? "veikla" : "pokalbis");
 const selectedKind = () => ($("input[name=kind]:checked") || {}).value || "pokalbis";
-const sectionsFor = (d) => (kindOf(d) === "veikla" ? [["closing", "Užbaigimas"]] : SECTIONS);
+const sectionsFor = (d) => (kindOf(d) === "veikla" ? [["closing", "Užbaigimas"]] : [["main", "Klausimai"]]);
+
+// Pokalbio klausimus sujungia į vieną sąrašą (seniems scenarijams)
+function normalize(d) {
+  if (!d || !d.scenario || kindOf(d) === "veikla") return d;
+  const s = d.scenario;
+  if ((s.warmup || []).length || (s.closing || []).length) {
+    s.main = [...(s.warmup || []), ...(s.main || []), ...(s.closing || [])];
+    s.warmup = [];
+    s.closing = [];
+  }
+  return d;
+}
 
 function endTime(start) {
   const [hh, mm] = (start || MEETING_START).split(":").map(Number);
@@ -125,7 +144,7 @@ function loadDraft() {
   // Senas bendras juodraštis (iki atskirų juodraščių) – nežinia, kieno, todėl išmetamas
   ls.set("juodrastis", null);
   state.notice = "";
-  try { state.draft = JSON.parse(ls.get(draftKey())); } catch (e) { state.draft = null; }
+  try { state.draft = normalize(JSON.parse(ls.get(draftKey()))); } catch (e) { state.draft = null; }
   $("#topic").value = state.draft ? state.draft.topic || "" : "";
   $("#suggestions").hidden = true;
   showError("");
@@ -299,16 +318,16 @@ async function generate(ev) {
       scenario.activities = (scenario.activities || []).map((a) => ({ ...a, minutes: Number(a.minutes) || 30 }));
     }
     state.notice = "";
-    state.draft = {
+    state.draft = normalize({
       stage: "review",
       kind,
       topic,
       depth,
       count,
       scenario,
-      timing: prev?.timing && kindOf(prev) === kind ? { ...prev.timing } : { ...defaults },
+      timing: prev?.timing && kindOf(prev) === kind ? { ...defaults, ...prev.timing } : { ...defaults },
       date: meetingDate(),
-    };
+    });
     saveDraft();
     renderResult();
     $("#result").scrollIntoView({ behavior: "smooth" });
@@ -387,9 +406,21 @@ function contentBlocks(d) {
   return [kindOf(d) === "veikla" ? activitiesBlock(d) : null, sections];
 }
 
+// Nekeičiama kiekvieno susitikimo pradžia
+function openingBlock() {
+  return h("div", { class: "opening" },
+    h("p", { class: "label", text: "Vakaro pradžia (kiekvieną kartą)" }),
+    h("ol", { class: "opening-list" },
+      h("li", { class: "plain" }, h("span", {}, h("strong", { text: "Įsižeminimas" }), ` · ${GROUNDING.minutes} min.`)),
+      ROUNDS.map((r, i) => h("li", { class: "plain" }, h("span", {}, h("strong", { text: `${i + 1} ratas: ` }), r.questions.join(" ")))),
+    )
+  );
+}
+
 function renderReview(d, kindLabel) {
   return [
     h("h2", { text: d.topic }),
+    openingBlock(),
     h("p", { class: "hint", text: "Spustelk ant bet kurio teksto, kad jį pataisytum savais žodžiais, arba spausk „Kitas“." }),
     editable("p", { class: "intro" }, d.scenario.intro || "", (v) => { d.scenario.intro = v; }),
     contentBlocks(d),
@@ -454,7 +485,7 @@ async function swap(section, index, btn) {
 // Kiek minučių suplanuota (su įsižeminimu)
 function planMinutes(d) {
   const t = d.timing || {};
-  let mins = GROUNDING.minutes;
+  let mins = GROUNDING.minutes + ROUNDS.reduce((sum, r) => sum + roundMinutes(d, r), 0);
   if (kindOf(d) === "veikla") {
     mins += (d.scenario.activities || []).reduce((sum, a) => sum + (Number(a.minutes) || 0), 0);
     mins += (d.scenario.closing || []).length * (Number(t.closing) || 0);
@@ -479,7 +510,7 @@ function renderConfig(d) {
     const mins = planMinutes(d);
     const left = MEETING_MINUTES - mins;
     total.textContent =
-      `Suplanuota ${fmtMinutes(mins)} iš 3 val., įskaitant ${GROUNDING.minutes} min. įsižeminimą. ` +
+      `Suplanuota ${fmtMinutes(mins)} iš 3 val., įskaitant įsižeminimą ir pasisakymų ratus. ` +
       (left >= 0 ? `Laisvo laiko lieka ${fmtMinutes(left)}` : `Viršyta ${fmtMinutes(-left)}`);
     total.classList.toggle("over-plan", left < 0);
   };
@@ -487,15 +518,21 @@ function renderConfig(d) {
     type: "number", min: "0", max: String(max), inputmode: "numeric", value: value ?? 0,
     oninput: (e) => { onInput(Math.max(0, Math.min(max, Number(e.target.value) || 0))); saveDraft(); update(); },
   });
-  const minutes = (key, label) => h("label", { class: "mini" }, label, number(d.timing[key], (v) => { d.timing[key] = v; }));
   update();
 
   const confirmBtn = h("button", { class: "primary small", type: "button", text: "✓ Patvirtinti" });
   confirmBtn.onclick = () => confirmPlan(confirmBtn);
 
+  const roundRow = (r, i) => h("label", { class: "mini inline-row" },
+    h("span", { text: `${i + 1} ratas: ${r.questions[0]}${r.questions.length > 1 ? " …" : ""}` }),
+    number(roundMinutes(d, r), (v) => { d.timing[r.key] = v; }, 90)
+  );
   return h("div", { class: "card" },
     h("h2", { text: d.topic }),
     h("p", { class: "meeting-line", text: dateLine(d) }),
+    h("p", { class: "label", style: "margin-top:16px", text: "Vakaro pradžia (min.)" }),
+    h("div", { class: "mini inline-row" }, h("span", { text: "Įsižeminimas" }), h("span", { class: "fixed-min", text: String(GROUNDING.minutes) })),
+    ROUNDS.map(roundRow),
     veikla
       ? [
           h("p", { class: "label", style: "margin-top:16px", text: "Veiklų trukmė (min.)" }),
@@ -505,8 +542,10 @@ function renderConfig(d) {
           h("label", { class: "mini inline-row" }, h("span", { text: "Užbaigimo klausimas" }), number(d.timing.closing, (v) => { d.timing.closing = v; })),
         ]
       : [
-          h("p", { class: "label", style: "margin-top:16px", text: "Vieno klausimo trukmė (min.)" }),
-          h("div", { class: "row" }, minutes("warmup", "Apšilimas"), minutes("main", "Pagrindiniai"), minutes("closing", "Užbaigimas")),
+          h("label", { class: "mini inline-row", style: "margin-top:16px" },
+            h("span", { class: "label", style: "margin:0", text: "Vieno klausimo trukmė (min.)" }),
+            number(d.timing.main, (v) => { d.timing.main = v; })
+          ),
         ],
     total,
     h("div", { class: "actions" },
@@ -548,6 +587,7 @@ function renderReady(d) {
     : `${SECTIONS.reduce((n, [k]) => n + (d.scenario[k] || []).length, 0)} klausimai`;
   const preview = h("details", { class: "preview" },
     h("summary", { text: "Peržiūrėti programą" }),
+    openingBlock(),
     d.scenario.intro ? h("p", { class: "hint", style: "font-style:italic", text: d.scenario.intro }) : null,
     (d.scenario.activities || []).length
       ? [h("h3", { text: "Veiklos" }), h("ol", {}, d.scenario.activities.map((a) => h("li", { class: "plain", text: `${a.title} (${a.minutes || 0} min.)` })))]
@@ -685,6 +725,12 @@ function openHost() {
   const t = d.timing || {};
   host.slides = [
     { label: "Įsižeminimas", text: GROUNDING.text, min: GROUNDING.minutes, intro: true },
+    ...ROUNDS.map((r, i) => ({
+      label: `Pasisakymų ratas · ${i + 1}/${ROUNDS.length}`,
+      text: r.questions.join("\n"),
+      sub: "Kiekviena pasisako iš eilės.",
+      min: roundMinutes(d, r),
+    })),
     { label: "Įžanga", text: s.intro || d.topic, min: 0, intro: true },
   ];
   if (kindOf(d) === "veikla") {
@@ -705,7 +751,7 @@ function openHost() {
   host.running = true;
   resetSlide();
 
-  try { host.audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { host.audio = null; }
+  unlockSounds();
   if (navigator.wakeLock) navigator.wakeLock.request("screen").then((l) => (host.lock = l)).catch(() => {});
 
   const el = host.el;
@@ -724,6 +770,7 @@ function openHost() {
   $("#host").replaceChildren(
     h("div", { class: "host-top" },
       el.label, el.total,
+      soundButton(),
       h("button", { class: "host-close", type: "button", "aria-label": "Uždaryti", text: "✕", onclick: closeHost })
     ),
     h("div", { class: "host-body" }, h("div", {}, el.q, el.sub)),
@@ -786,8 +833,7 @@ function closeHost() {
   document.body.classList.remove("no-scroll");
   if (host.lock) host.lock.release().catch(() => {});
   host.lock = null;
-  if (host.audio && host.audio.close) host.audio.close().catch(() => {});
-  host.audio = null;
+
 }
 
 function hostKeys(e) {
@@ -820,10 +866,15 @@ function tick() {
   host.elapsed++;
   host.total++;
   const slide = host.slides[host.i];
-  if (slide.min && !host.notified && host.elapsed >= slide.min * 60) {
-    host.notified = true;
-    chime();
-    if (navigator.vibrate) navigator.vibrate([150, 100, 150]);
+  if (slide.min) {
+    const left = slide.min * 60 - host.elapsed;
+    if (left > 0 && left <= 5) {
+      playSound("tick"); // paskutinės 5 sekundės
+    } else if (left === 0 && !host.notified) {
+      host.notified = true;
+      playSound("end");
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 300]);
+    }
   }
   renderClock();
 }
@@ -861,24 +912,75 @@ function renderClock() {
   el.notice.hidden = !host.notified;
 }
 
-function chime() {
-  const ctx = host.audio;
-  if (!ctx) return;
-  if (ctx.resume) ctx.resume();
-  const now = ctx.currentTime;
-  [523.25, 659.25, 783.99].forEach((freq, i) => {
-    const start = now + i * 0.22;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0, start);
-    gain.gain.linearRampToValueAtTime(0.12, start + 0.03);
-    gain.gain.exponentialRampToValueAtTime(0.001, start + 1.4);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(start);
-    osc.stop(start + 1.5);
+// ---------- Garsai ----------
+// Naudojami <audio> elementai (ne Web Audio), nes iPhone juos groja patikimiau.
+// Garsai sugeneruojami čia pat kaip WAV failai.
+
+function makeWav(notes, gap = 0) {
+  const rate = 22050;
+  const parts = notes.map(([freq, dur]) => {
+    const n = Math.floor(rate * dur);
+    const out = new Float32Array(n + Math.floor(rate * gap));
+    for (let i = 0; i < n; i++) {
+      const t = i / rate;
+      const env = Math.min(1, t / 0.01) * Math.exp(-3 * t / dur);
+      out[i] = env * (Math.sin(2 * Math.PI * freq * t) + 0.3 * Math.sin(4 * Math.PI * freq * t)) * 0.6;
+    }
+    return out;
   });
+  const total = parts.reduce((a, p) => a + p.length, 0);
+  const buf = new ArrayBuffer(44 + total * 2);
+  const v = new DataView(buf);
+  const str = (o, x) => [...x].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  str(0, "RIFF"); v.setUint32(4, 36 + total * 2, true); str(8, "WAVEfmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, "data"); v.setUint32(40, total * 2, true);
+  let o = 44;
+  for (const p of parts) for (const x of p) { v.setInt16(o, Math.max(-1, Math.min(1, x)) * 32767, true); o += 2; }
+  return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+}
+
+const sounds = {};
+let soundOn = ls.get("garsas") !== "off";
+
+function unlockSounds() {
+  // Leidžia grojant net kai iPhone begarsio režimo jungiklis įjungtas (Safari 17+)
+  try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+  if (!sounds.tick) {
+    sounds.tick = new Audio(makeWav([[880, 0.18]]));
+    sounds.end = new Audio(makeWav([[659.25, 0.35], [783.99, 0.35], [1046.5, 0.9]]));
+  }
+  // Pirmas grojimas turi įvykti paspaudus mygtuką – tada telefonas leidžia groti ir vėliau
+  for (const a of Object.values(sounds)) {
+    a.muted = true;
+    a.play().then(() => { a.pause(); a.currentTime = 0; a.muted = false; }).catch(() => { a.muted = false; });
+  }
+}
+
+function playSound(name) {
+  const a = sounds[name];
+  if (!soundOn || !a) return;
+  try {
+    a.currentTime = 0;
+    a.play().catch(() => {});
+  } catch (e) {}
+}
+
+function soundButton() {
+  const btn = h("button", { class: "host-close", type: "button" });
+  const paint = () => {
+    btn.textContent = soundOn ? "🔔" : "🔕";
+    btn.setAttribute("aria-label", soundOn ? "Išjungti garsą" : "Įjungti garsą");
+  };
+  btn.onclick = () => {
+    soundOn = !soundOn;
+    ls.set("garsas", soundOn ? null : "off");
+    paint();
+    if (soundOn) playSound("tick");
+  };
+  paint();
+  return btn;
 }
 
 // ---------- Archyvas ----------
@@ -944,6 +1046,7 @@ function archiveCard(item) {
       h("p", { class: "hint", text: `${item.host ? `Veda ${item.host}. ` : ""}${item.topic ? "Visa programa" : "Tema ir programa"} atsivers po susitikimo.` })
     );
   }
+  item = normalize(JSON.parse(JSON.stringify(item)));
   const depth = (DEPTHS.find(([v]) => v === item.depth) || [])[1] || OLD_DEPTHS[item.depth];
   const kindLabel = kindOf(item) === "veikla" ? "🎨 Veiklos" : "💬 Pokalbis";
   const acts = item.scenario.activities || [];
@@ -1011,10 +1114,10 @@ function revealButton(item) {
 function openArchived(item) {
   if (state.draft && state.draft.id && !confirm("Dabartinis scenarijus bus pakeistas. Tęsti?")) return;
   const copy = JSON.parse(JSON.stringify(item));
-  state.draft = {
+  state.draft = normalize({
     stage: "review", kind: copy.kind, topic: copy.topic, depth: copy.depth, count: copy.count,
     scenario: copy.scenario, timing: copy.timing, date: meetingDate(),
-  };
+  });
   state.notice = "";
   saveDraft();
   $("#topic").value = item.topic;

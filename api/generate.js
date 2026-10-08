@@ -50,7 +50,7 @@ function systemPrompt() {
   return [
     "Tu padedi draugių būrelio „Gentis“ vedančiajai pasiruošti susitikimui.",
     "Būrelis renkasi kas dvi savaites 18:30–21:30 (3 valandos) ir kalbasi arba užsiima veiklomis viena iš anksto pasirinkta tema.",
-    "Kiekvienas susitikimas prasideda 3 minučių įsižeminimu.",
+    "Kiekvienas susitikimas prasideda 3 minučių įsižeminimu ir dviem pasisakymų ratais: „Kaip šiandien jaučiuosi? Kas įvyko nuo praeito susitikimo? Ko tikiuosi iš šiandienos susitikimo?“ ir „Jei dirbčiau vidinį darbą, kokia tema kalbėčiau?“ – nekartok šių klausimų.",
     "Rašai taisyklinga, gyva, šilta lietuvių kalba, kreipiesi į moteris.",
     "Klausimai turi būti atviri (ne taip/ne), konkretūs, skatinantys pasakoti istorijas.",
     "Venk banalybių ir kartojimosi. Kiekvienas klausimas – vienas sakinys, ne ilgesnis nei ~25 žodžiai.",
@@ -68,10 +68,8 @@ Tonas: ${tone(depth)}.
 ${avoidText}
 Sukurk vakaro scenarijų tokiu JSON formatu:
 {
-  "intro": "1–2 sakinių įžanga, kurią vedančioji galėtų perskaityti garsiai",
-  "warmup": ["2 lengvi apšilimo klausimai"],
-  "main": ["pagrindiniai klausimai – tiksliai ${count}, nuo lengvesnių link gilesnių"],
-  "closing": ["1 užbaigimo klausimas, kuris gražiai užbaigia vakarą"]
+  "intro": "1–2 sakinių įžanga į temą, kurią vedančioji galėtų perskaityti garsiai",
+  "main": ["klausimai – tiksliai ${count}, nuo lengvesnių link gilesnių; paskutinis gali gražiai užbaigti vakarą"]
 }`;
 }
 
@@ -83,7 +81,7 @@ function activitiesPrompt(topic, depth, count, avoid) {
 Tonas: ${tone(depth)}.
 ${avoidText}
 Šį kartą susitikimas – ne pokalbis, o veiklų vakaras. Sukurk tiksliai ${count} veiklas (-ų), susijusias su tema.
-Visos veiklos kartu turi tilpti į maždaug 140 minučių (likęs laikas – įsižeminimui, įžangai, pertraukėlei ir užbaigimui).
+Visos veiklos kartu turi tilpti į maždaug 110 minučių (likęs laikas – įsižeminimui, pasisakymų ratams, pertraukėlei ir užbaigimui).
 Veiklos turi būti įvairios (pvz., kūrybinė, judesio, žaidimo, refleksijos), ne vien pokalbiai.
 
 Atsakyk tokiu JSON formatu:
