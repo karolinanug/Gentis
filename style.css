@@ -415,3 +415,20 @@ select.host-select, input[type=email] {
 .meeting.empty .next-topic { color: var(--ink); font-weight: 600; margin: 0 0 8px; }
 .site-foot .link { font-size: inherit; color: var(--muted); }
 .site-foot .link.danger:hover { color: var(--error); }
+/* Kito susitikimo kortelė viršuje */
+.next-banner {
+  display: grid;
+  gap: 2px;
+  margin: 4px 0 16px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  text-decoration: none;
+}
+.next-banner:hover { border-color: var(--accent); }
+.next-banner.revealed { background: var(--accent-soft); border-color: transparent; }
+.nb-label { font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
+.nb-topic { font-family: Lora, Georgia, serif; font-size: 1.2rem; font-weight: 600; }
+.nb-meta { font-size: .88rem; color: var(--muted); }

@@ -1181,6 +1181,7 @@ function revealButton(item) {
       const { item: saved } = await api("/api/archive", { body: { reveal: { id: item.id, revealed: reveal } } });
       if (state.archive) state.archive = state.archive.map((i) => (i.id === saved.id ? saved : i));
       if (state.draft && state.draft.id === saved.id) { state.draft.revealed = saved.revealed; saveDraft(); renderResult(); }
+      loadCalendar().catch(() => {});
       if (!$("#tab-archyvas").hidden) renderArchive();
     } catch (e) {
       btn.disabled = false;
@@ -1405,6 +1406,35 @@ async function loadCalendar() {
   state.calendar = await api("/api/calendar", { method: "GET" });
   state.meeting = state.calendar.meeting;
   syncDraftDate();
+  renderNextBanner();
+}
+
+// Kito susitikimo kortelė viršuje – matoma visuose skirtukuose
+function renderNextBanner() {
+  const el = $("#next-banner");
+  const cal = state.calendar;
+  if (!cal || !state.me) { el.hidden = true; return; }
+  const m = cal.meeting;
+  const info = m || cal.nextTopic || {};
+  const host = m ? m.host : cal.rotation.nextHost;
+  const iAmHost = (host || "").toLowerCase() === state.me.name.toLowerCase();
+  const topic = info.topicState === "revealed"
+    ? `${info.topic}${info.kind === "veikla" ? " · veiklų vakaras" : ""}`
+    : info.topicState === "secret"
+      ? (iAmHost ? "tavo tema dar paslaptis" : "🤫 staigmena")
+      : iAmHost ? "Tema dar nesuplanuota" : "Tema dar nežinoma";
+  const absent = (cal.absent || []).includes(state.me.id);
+  el.replaceChildren(
+    h("span", { class: "nb-label", text: "Kitas susitikimas" }),
+    h("strong", { class: "nb-topic", text: topic }),
+    h("span", { class: "nb-meta" },
+      m ? `📅 ${fmtDate(m.date)}, ${m.time || MEETING_START}–${endTime(m.time || MEETING_START)}` : "📅 data dar nenubalsuota",
+      iAmHost ? " · vedi tu" : ` · veda ${host}`,
+      absent ? " · 🙅 tu negalėsi" : ""
+    )
+  );
+  el.classList.toggle("revealed", info.topicState === "revealed");
+  el.hidden = false;
 }
 
 // Kai balsavimu patvirtinama data, ji įrašoma į vedančiosios planą
@@ -1669,6 +1699,7 @@ function meetingCard(cal) {
 }
 
 function drawCalendar() {
+  renderNextBanner();
   const cal = state.calendar;
   const meId = state.me.id;
   const t = today();
@@ -1840,6 +1871,7 @@ function showAuth() {
   $("#topic").value = "";
   renderResult();
   $("#app").hidden = true;
+  $("#next-banner").hidden = true;
   $("#auth").hidden = false;
   renderAuth($("#auth"));
 }
