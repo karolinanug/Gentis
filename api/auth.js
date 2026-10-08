@@ -4,6 +4,36 @@
 const crypto = require("crypto");
 const store = require("../lib/store");
 const auth = require("../lib/auth");
+const { mailEnabled, sendMail } = require("../lib/mail");
+
+const DEFAULT_ORDER = ["Karolina", "Ieva", "Vilma", "Erika", "Dalia"];
+
+// Laiškas administratorei (ADMIN_EMAIL arba GMAIL_USER), kai užsiregistruoja nauja narė
+async function notifyNewMember(name, method, email) {
+  const to = process.env.ADMIN_EMAIL || process.env.GMAIL_USER;
+  if (!mailEnabled() || !to) return;
+  try {
+    const rotation = store.parse(await store.cmd("GET", "rotation")) || {};
+    const order = Array.isArray(rotation.order) && rotation.order.length ? rotation.order : DEFAULT_ORDER;
+    const inOrder = order.some((n) => n.toLowerCase() === name.toLowerCase());
+    const when = new Date().toLocaleString("lt-LT", { timeZone: "Europe/Vilnius", dateStyle: "long", timeStyle: "short" });
+    const lines = [
+      "Genties susitikime užsiregistravo nauja narė.",
+      "",
+      `Vardas: ${name}`,
+      `Prisijungimas: ${method}`,
+      email ? `El. paštas: ${email}` : null,
+      `Laikas: ${when}`,
+      "",
+      inOrder
+        ? "Vardas sutampa su vedančiųjų eile."
+        : `Dėmesio: vardo „${name}“ nėra vedančiųjų eilėje (${order.join(", ")}). Jei tai klaida, paprašyk ištrinti paskyrą ir užsiregistruoti iš naujo tiksliu vardu.`,
+    ].filter((l) => l !== null);
+    await sendMail({ to, subject: `Nauja narė: ${name}`, text: lines.join("\n") });
+  } catch (err) {
+    console.error("Nepavyko išsiųsti pranešimo apie naują narę:", err);
+  }
+}
 
 module.exports = async (req, res) => {
   // GET /api/auth – greitas patikrinimas naršyklėje, ar nustatytas Google Client ID
@@ -49,6 +79,7 @@ module.exports = async (req, res) => {
       }
       await store.cmd("HSET", "google", g.sub, id);
       const token = await auth.createSession(id);
+      await notifyNewMember(cleanName, "per Google", g.email);
       return res.status(200).json({ token, user: { id, name: cleanName, google: true, picture: g.picture } });
     }
 
@@ -122,6 +153,7 @@ module.exports = async (req, res) => {
       const created = await store.cmd("HSETNX", "users", id, record);
       if (!created) return res.status(409).json({ error: "Toks vardas jau užimtas – prisijunk arba pasirink kitą" });
       const token = await auth.createSession(id);
+      await notifyNewMember(cleanName, "vardu ir slaptažodžiu", "");
       return res.status(200).json({ token, user: { id, name: cleanName } });
     }
 
