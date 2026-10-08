@@ -28,6 +28,7 @@ async function getRotation() {
     next: Number.isInteger(r.next) ? r.next % order.length : 0,
     override: r.override || "",
     lastDate: r.lastDate || "",
+    lastCompletedId: r.lastCompletedId || "",
   };
 }
 
@@ -230,6 +231,24 @@ module.exports = async (req, res) => {
         nextTopic: await nextTopic(confirmed || meeting, rotation, today),
       };
       return res.status(200).json({ ...out, autoConfirmed: Boolean(confirmed), emailed });
+    }
+
+    // Vedančioji patvirtino, kad susitikimas įvyko: eilė iškart pereina prie kitos,
+    // data ir „negalėsiu“ žymos išvalomos – prasideda naujas balsavimas.
+    if (req.method === "POST" && req.body && "completed" in req.body) {
+      const doneId = String(req.body.completed || "").slice(0, 32);
+      if (doneId && rotation.lastCompletedId === doneId) {
+        return res.status(200).json({ ...view(rotation, users, availability, meeting, user, absent), alreadyDone: true });
+      }
+      const slot = meeting && Number.isInteger(meeting.slot) ? meeting.slot : rotation.next;
+      rotation.next = (slot + 1) % rotation.order.length;
+      rotation.override = "";
+      rotation.lastDate = meeting && meeting.date < today ? meeting.date : today;
+      rotation.lastCompletedId = doneId;
+      await saveRotation(rotation);
+      await store.cmd("DEL", "meeting");
+      await store.cmd("DEL", "absent");
+      return res.status(200).json(view(rotation, users, availability, null, user, []));
     }
 
     if (req.method === "POST" && req.body && "nextHost" in req.body) {

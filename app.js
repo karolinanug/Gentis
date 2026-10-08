@@ -718,9 +718,17 @@ async function completeMeeting() {
   const d = state.draft;
   const { item } = await api("/api/archive", { body: { entry: { ...entryOf(d, "done"), date: d.date || today() } } });
   if (state.archive) state.archive = [item, ...state.archive.filter((i) => i.id !== item.id)];
+  // Eilė pereina prie kitos vedančiosios, prasideda naujas balsavimas
+  try {
+    const cal = await api("/api/calendar", { body: { completed: item.id } });
+    state.calendar = cal;
+    state.meeting = cal.meeting;
+  } catch (e) {}
   clearDraft();
-  state.notice = `Susitikimas „${item.topic}“ išsaugotas archyve`;
+  const nextHost = state.calendar?.rotation?.nextHost;
+  state.notice = `Susitikimas „${item.topic}“ išsaugotas archyve.${nextHost ? ` Kitą susitikimą veda ${nextHost}.` : ""}`;
   renderResult();
+  renderNextBanner();
 }
 
 // ---------- Kvietimo žinutė ----------
@@ -1448,7 +1456,8 @@ async function loadCalendar() {
 function renderNextBanner() {
   const el = $("#next-banner");
   const cal = state.calendar;
-  if (!cal || !state.me) { el.hidden = true; return; }
+  // Rodoma tik tada, kai kito susitikimo data jau patvirtinta
+  if (!cal || !state.me || !cal.meeting) { el.hidden = true; return; }
   const m = cal.meeting;
   const info = m || cal.nextTopic || {};
   const host = m ? m.host : cal.rotation.nextHost;
