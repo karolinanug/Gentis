@@ -1431,6 +1431,7 @@ function renderAuth(root) {
   root.replaceChildren(...[
     h("h1", { text: "Genties susitikimas" }),
     h("p", { class: "lead", text: "Mūsų susitikimų planavimas: temos, klausimai ir kito susitikimo data." }),
+    h("p", { class: "auth-help" }, h("a", { href: "pagalba.html", text: "Pirmą kartą? Kaip naudotis →" })),
     state.googleClientId ? googleCard(fail) : null,
     h("div", { class: "card" },
       title,

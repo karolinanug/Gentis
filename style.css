@@ -449,3 +449,26 @@ select.host-select, input[type=email] {
 .btn-link { display: inline-flex; align-items: center; text-decoration: none; color: var(--ink); border-radius: 10px; font-weight: 600; }
 .meeting-foot { margin-top: 10px; }
 .meeting-foot .link { font-size: inherit; color: var(--muted); text-decoration: underline; }
+/* Pagalbos puslapis */
+.guide h2 { margin-top: 36px; scroll-margin-top: 16px; }
+.guide-hero { display: flex; gap: 16px; align-items: center; margin: 8px 0 20px; }
+.guide-hero img { border-radius: 16px; flex: none; }
+.guide-hero h1 { margin: 0 0 4px; }
+.guide-hero .lead { margin: 0; color: var(--muted); }
+.toc ol { margin: 0; padding-left: 20px; }
+.toc li { display: list-item; border: 0; padding: 3px 0; }
+.toc li::before { content: none; }
+.guide .steps { list-style: none; padding: 0; margin: 0; counter-reset: step; }
+.guide .steps > li { counter-increment: step; display: block; position: relative; padding: 4px 0 14px 40px; border: 0; }
+.guide .steps > li::before { content: counter(step); position: absolute; left: 0; top: 2px; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; font-size: .85rem; display: flex; align-items: center; justify-content: center; }
+.guide .steps ul { margin: 6px 0 0; }
+.guide .flow { list-style: none; padding: 0; margin: 0 0 12px; border-left: 2px solid var(--accent-soft); }
+.guide .flow li { display: block; border: 0; padding: 6px 0 6px 18px; position: relative; }
+.guide .flow li::before { content: ""; position: absolute; left: -6px; top: 13px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.tip { background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; font-size: .93rem; }
+.faq dt { font-weight: 600; margin-top: 14px; }
+.faq dd { margin: 4px 0 0; color: var(--muted); }
+.guide-end { text-align: center; margin: 40px 0 8px; }
+.primary-link { display: inline-block; padding: 14px 22px; border-radius: 10px; background: var(--accent); color: #fff !important; text-decoration: none; font-weight: 600; }
+.auth-help { text-align: center; margin: 0 0 16px; }
+.auth-help a { color: var(--accent); font-weight: 500; }
