@@ -7,287 +7,54 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <style>
-    :root {
-      --bg: #f7f1ea;
-      --card: #fffdfa;
-      --ink: #2e2622;
-      --muted: #7a6c64;
-      --line: #e8ddd2;
-      --accent: #b5654a;
-      --accent-soft: #f3e2d9;
-      --error: #a33a2a;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #1e1a18;
-        --card: #28231f;
-        --ink: #f1e9e2;
-        --muted: #b0a399;
-        --line: #3d3530;
-        --accent: #e0937a;
-        --accent-soft: #3a2b25;
-        --error: #f08a78;
-      }
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--ink);
-      font: 16px/1.55 Inter, system-ui, sans-serif;
-    }
-    main { max-width: 680px; margin: 0 auto; padding: 40px 16px 64px; }
-    h1, h2 { font-family: Lora, Georgia, serif; font-weight: 600; }
-    h1 { font-size: 2rem; margin: 0 0 4px; }
-    .lead { color: var(--muted); margin: 0 0 28px; }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: 24px;
-    }
-    label { display: block; font-weight: 500; font-size: .9rem; margin-bottom: 6px; }
-    input[type=text], input[type=password] {
-      width: 100%;
-      padding: 12px 14px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: var(--bg);
-      color: var(--ink);
-      font: inherit;
-    }
-    input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-    .field { margin-bottom: 18px; }
-    .depths { display: flex; gap: 8px; flex-wrap: wrap; }
-    .depths input { position: absolute; opacity: 0; pointer-events: none; }
-    .depths label {
-      margin: 0;
-      padding: 8px 16px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      cursor: pointer;
-      font-weight: 500;
-    }
-    .depths input:checked + label { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .depths input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
-    button {
-      font: inherit;
-      font-weight: 600;
-      cursor: pointer;
-      border-radius: 10px;
-      border: 0;
-    }
-    .primary { width: 100%; padding: 14px; background: var(--accent); color: #fff; font-size: 1rem; }
-    .primary:disabled { opacity: .6; cursor: wait; }
-    .error { color: var(--error); margin: 14px 0 0; font-weight: 500; }
-    #result { margin-top: 32px; }
-    .intro {
-      font-family: Lora, Georgia, serif;
-      font-style: italic;
-      font-size: 1.15rem;
-      background: var(--accent-soft);
-      border-radius: 12px;
-      padding: 18px 20px;
-      margin: 0 0 24px;
-    }
-    h2 { font-size: 1.2rem; margin: 28px 0 10px; }
-    ol { margin: 0; padding: 0; list-style: none; counter-reset: q; }
-    li {
-      counter-increment: q;
-      display: grid;
-      grid-template-columns: 28px 1fr auto;
-      gap: 10px;
-      align-items: start;
-      padding: 12px 0;
-      border-bottom: 1px solid var(--line);
-    }
-    li::before { content: counter(q) "."; color: var(--accent); font-weight: 600; }
-    .swap {
-      background: transparent;
-      color: var(--muted);
-      border: 1px solid var(--line);
-      padding: 4px 10px;
-      font-size: .8rem;
-      font-weight: 500;
-      white-space: nowrap;
-    }
-    .swap:hover { color: var(--accent); border-color: var(--accent); }
-    .swap:disabled { opacity: .5; cursor: wait; }
-    .actions { display: flex; gap: 10px; margin-top: 28px; flex-wrap: wrap; }
-    .secondary { padding: 10px 16px; background: transparent; border: 1px solid var(--line); color: var(--ink); }
-    .secondary:hover { border-color: var(--accent); }
-    @media print {
-      body { background: #fff; color: #000; }
-      .card, .swap, .actions, .lead, h1 { display: none; }
-      #result { margin: 0; }
-    }
-  </style>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <main>
-    <h1>Būrelio vakaras</h1>
-    <p class="lead">Įrašyk temą ir gausi klausimų scenarijų susitikimui.</p>
+    <header class="top">
+      <h1>Būrelio vakaras</h1>
+      <nav class="tabs">
+        <a href="#scenarijus" data-tab="scenarijus">Scenarijus</a>
+        <a href="#archyvas" data-tab="archyvas">Archyvas</a>
+        <a href="#kalendorius" data-tab="kalendorius">Kalendorius</a>
+      </nav>
+    </header>
 
-    <form class="card" id="form">
-      <div class="field">
-        <label for="topic">Tema</label>
-        <input type="text" id="topic" maxlength="120" placeholder="pvz., Draugystė, Vaikystės vasaros, Drąsa" required />
-      </div>
-      <div class="field">
-        <label>Tonas</label>
-        <div class="depths">
-          <input type="radio" name="depth" id="d1" value="lengvas" /><label for="d1">Lengvas</label>
-          <input type="radio" name="depth" id="d2" value="vidutinis" checked /><label for="d2">Vidutinis</label>
-          <input type="radio" name="depth" id="d3" value="gilus" /><label for="d3">Gilus</label>
+    <section id="tab-scenarijus" class="tab">
+      <form class="card" id="form">
+        <div class="field">
+          <div class="label-row">
+            <label for="topic">Tema</label>
+            <button type="button" class="link" id="suggest">✨ Pasiūlyk temų</button>
+          </div>
+          <input type="text" id="topic" maxlength="120" placeholder="pvz., Draugystė, Vaikystės vasaros, Drąsa" required />
+          <p class="hint" id="topic-note" hidden></p>
+          <div class="suggestions" id="suggestions" hidden></div>
         </div>
-      </div>
-      <div class="field">
-        <label for="code">Būrelio kodas</label>
-        <input type="password" id="code" autocomplete="current-password" required />
-      </div>
-      <button class="primary" id="go" type="submit">Kurti scenarijų</button>
-      <p class="error" id="error" hidden></p>
-    </form>
+        <div class="field">
+          <span class="label">Tonas</span>
+          <div class="chips" id="depths"></div>
+        </div>
+        <div class="field">
+          <span class="label">Pagrindinių klausimų skaičius</span>
+          <div class="chips" id="counts"></div>
+        </div>
+        <div class="field" id="code-field">
+          <label for="code">Būrelio kodas</label>
+          <input type="password" id="code" autocomplete="current-password" />
+        </div>
+        <button class="primary" id="go" type="submit">Kurti scenarijų</button>
+        <p class="error" id="error" hidden></p>
+      </form>
+      <div id="result"></div>
+    </section>
 
-    <section id="result" hidden></section>
+    <section id="tab-archyvas" class="tab" hidden></section>
+    <section id="tab-kalendorius" class="tab" hidden></section>
   </main>
 
-  <script>
-    const $ = (id) => document.getElementById(id);
-    const SECTIONS = [
-      ["warmup", "Apšilimas"],
-      ["main", "Pagrindiniai klausimai"],
-      ["closing", "Užbaigimas"],
-    ];
-    let scenario = null;
-    let request = null;
+  <div id="host" class="host" hidden></div>
 
-    try { $("code").value = localStorage.getItem("burelioKodas") || ""; } catch (e) {}
-
-    async function callApi(body) {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      let data = {};
-      try { data = await res.json(); } catch (e) {}
-      if (!res.ok) throw new Error(data.error || "Kažkas nepavyko, pabandyk dar kartą");
-      return data;
-    }
-
-    function showError(msg) {
-      $("error").textContent = msg;
-      $("error").hidden = !msg;
-    }
-
-    function render() {
-      const r = $("result");
-      r.innerHTML = "";
-      const intro = document.createElement("p");
-      intro.className = "intro";
-      intro.textContent = scenario.intro || "";
-      r.append(intro);
-
-      for (const [key, title] of SECTIONS) {
-        const list = scenario[key] || [];
-        if (!list.length) continue;
-        const h = document.createElement("h2");
-        h.textContent = title;
-        const ol = document.createElement("ol");
-        list.forEach((q, i) => {
-          const li = document.createElement("li");
-          const span = document.createElement("span");
-          span.textContent = q;
-          const btn = document.createElement("button");
-          btn.className = "swap";
-          btn.type = "button";
-          btn.textContent = "Kitas";
-          btn.onclick = () => swap(key, i, btn);
-          li.append(span, btn);
-          ol.append(li);
-        });
-        r.append(h, ol);
-      }
-
-      const actions = document.createElement("div");
-      actions.className = "actions";
-      const copy = document.createElement("button");
-      copy.className = "secondary";
-      copy.type = "button";
-      copy.textContent = "Kopijuoti";
-      copy.onclick = async () => {
-        try {
-          await navigator.clipboard.writeText(asText());
-          copy.textContent = "Nukopijuota ✓";
-        } catch (e) {
-          copy.textContent = "Nepavyko nukopijuoti";
-        }
-        setTimeout(() => (copy.textContent = "Kopijuoti"), 2000);
-      };
-      const print = document.createElement("button");
-      print.className = "secondary";
-      print.type = "button";
-      print.textContent = "Spausdinti";
-      print.onclick = () => window.print();
-      actions.append(copy, print);
-      r.append(actions);
-      r.hidden = false;
-    }
-
-    function asText() {
-      const lines = [`Tema: ${request.topic}`, "", scenario.intro || ""];
-      for (const [key, title] of SECTIONS) {
-        const list = scenario[key] || [];
-        if (!list.length) continue;
-        lines.push("", title);
-        list.forEach((q, i) => lines.push(`${i + 1}. ${q}`));
-      }
-      return lines.join("\n");
-    }
-
-    async function swap(section, index, btn) {
-      btn.disabled = true;
-      btn.textContent = "…";
-      try {
-        const existing = SECTIONS.flatMap(([k]) => scenario[k] || []);
-        const data = await callApi({
-          ...request,
-          replace: { section, current: scenario[section][index], existing },
-        });
-        if (!data.question) throw new Error("Nepavyko gauti naujo klausimo");
-        scenario[section][index] = data.question;
-        render();
-      } catch (e) {
-        btn.disabled = false;
-        btn.textContent = "Kitas";
-        alert(e.message);
-      }
-    }
-
-    $("form").addEventListener("submit", async (ev) => {
-      ev.preventDefault();
-      showError("");
-      request = {
-        code: $("code").value.trim(),
-        topic: $("topic").value.trim(),
-        depth: document.querySelector("input[name=depth]:checked").value,
-      };
-      try { localStorage.setItem("burelioKodas", request.code); } catch (e) {}
-      $("go").disabled = true;
-      $("go").textContent = "Kuriama… (apie 10–20 s)";
-      try {
-        scenario = await callApi(request);
-        render();
-        $("result").scrollIntoView({ behavior: "smooth" });
-      } catch (e) {
-        showError(e.message);
-      } finally {
-        $("go").disabled = false;
-        $("go").textContent = "Kurti scenarijų";
-      }
-    });
-  </script>
+  <script src="app.js"></script>
 </body>
 </html>
