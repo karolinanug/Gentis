@@ -111,6 +111,16 @@ function autoMeeting(rotation, users, availability, today) {
   return { date: leaders[0], time: START, place: "", host: hostOf(rotation), slot: rotation.next, setBy: "automatiškai", auto: true };
 }
 
+// Ar vedančioji jau suplanavo temą šiam susitikimui ir ar ją paskelbė
+async function withTopic(meeting) {
+  if (!meeting) return meeting;
+  const plan = (await store.archiveItems()).find((i) => i.status === "planned" && i.date === meeting.date);
+  if (!plan) return { ...meeting, topicState: "none" };
+  return plan.revealed
+    ? { ...meeting, topicState: "revealed", topic: plan.topic, kind: plan.kind || "pokalbis" }
+    : { ...meeting, topicState: "secret" };
+}
+
 function view(rotation, users, availability, meeting, user) {
   const members = Object.entries(users)
     .map(([id, u]) => ({ id, name: u.name || id, picture: u.picture || "" }))
@@ -145,7 +155,7 @@ module.exports = async (req, res) => {
     const { users, availability } = await loadPeople(today);
 
     if (req.method === "GET") {
-      return res.status(200).json(view(rotation, users, availability, meeting, user));
+      return res.status(200).json(view(rotation, users, availability, await withTopic(meeting), user));
     }
 
     if (!user) return res.status(401).json({ error: "Prisijunk, kad galėtum žymėti" });

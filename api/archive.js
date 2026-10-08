@@ -1,4 +1,6 @@
-// Buvusių susitikimų archyvas.
+// Susitikimų archyvas.
+// status: "planned" – vedančioji patvirtino planą (tema slapta, kol nepaskelbta),
+//         "done"    – susitikimas įvyko (matomas visoms archyve).
 // Būsimo susitikimo tema – staigmena: ją mato tik išsaugojusi narė.
 // Kai vedančioji paskelbia temą, kitos mato jos pavadinimą;
 // klausimai visoms atsiveria kitą dieną po susitikimo.
@@ -36,11 +38,12 @@ function isOwner(item, user) {
 }
 
 function isVisible(item, user, today) {
-  return (item.date || "") < today || isOwner(item, user);
+  if (item.status === "done" || isOwner(item, user)) return true;
+  return Boolean(item.date) && item.date < today;
 }
 
 function masked(item) {
-  const out = { id: item.id, date: item.date, host: item.host, hidden: true };
+  const out = { id: item.id, date: item.date, host: item.host, status: item.status || "planned", hidden: true };
   if (item.revealed) {
     out.topic = item.topic;
     out.revealed = true;
@@ -57,7 +60,7 @@ module.exports = async (req, res) => {
     if (req.method === "GET") {
       const today = store.today();
       const items = (await store.archiveItems()).map((i) => (isVisible(i, access.user, today) ? i : masked(i)));
-      items.sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.savedAt || 0) - (a.savedAt || 0));
+      items.sort((a, b) => (b.date || "9999").localeCompare(a.date || "9999") || (b.savedAt || 0) - (a.savedAt || 0));
       return res.status(200).json({ items });
     }
 
@@ -90,7 +93,8 @@ module.exports = async (req, res) => {
       const item = {
         id,
         topic,
-        date: DATE.test(entry.date || "") ? entry.date : store.today(),
+        status: entry.status === "planned" ? "planned" : "done",
+        date: DATE.test(entry.date || "") ? entry.date : entry.status === "planned" ? "" : store.today(),
         kind: entry.kind === "veikla" ? "veikla" : "pokalbis",
         depth: typeof entry.depth === "string" ? entry.depth.slice(0, 20) : "vidutinis",
         count: Number(entry.count) || undefined,

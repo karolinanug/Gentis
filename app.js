@@ -124,6 +124,7 @@ function clearDraft() {
 function loadDraft() {
   // Senas bendras juodraštis (iki atskirų juodraščių) – nežinia, kieno, todėl išmetamas
   ls.set("juodrastis", null);
+  state.notice = "";
   try { state.draft = JSON.parse(ls.get(draftKey())); } catch (e) { state.draft = null; }
   $("#topic").value = state.draft ? state.draft.topic || "" : "";
   $("#suggestions").hidden = true;
@@ -254,8 +255,26 @@ async function suggestTopics() {
   }
 }
 
-function defaultDate() {
-  return state.meeting?.date || today();
+// Susitikimo data: ta, kuri patvirtinta kalendoriuje (balsavimu ar ranka)
+function meetingDate() {
+  return state.meeting?.date || "";
+}
+
+// Katinėlis, bėgantis įkrovimo juosta
+function catLoader(text) {
+  const fill = h("span", { class: "cat-fill" });
+  const cat = h("span", { class: "cat", "aria-hidden": "true", text: "🐈" });
+  const el = h("div", { class: "cat-loader", role: "status" },
+    h("p", { class: "cat-text", text }),
+    h("div", { class: "cat-track" }, fill, cat)
+  );
+  const set = (v) => { fill.style.width = `${v}%`; cat.style.left = `${v}%`; };
+  const started = Date.now();
+  const timer = setInterval(() => set(92 * (1 - Math.exp(-(Date.now() - started) / 7000))), 150);
+  set(0);
+  el.finish = () => new Promise((resolve) => { clearInterval(timer); set(100); setTimeout(resolve, 450); });
+  el.stop = () => clearInterval(timer);
+  return el;
 }
 
 async function generate(ev) {
@@ -267,37 +286,42 @@ async function generate(ev) {
   const depth = $("input[name=depth]:checked").value;
   const count = Number($("input[name=count]:checked").value);
   const btn = $("#go");
-  btn.disabled = true;
-  btn.textContent = "Kuriama… (apie 10–20 s)";
+  const loader = catLoader("Kuriama");
+  btn.hidden = true;
+  btn.after(loader);
   try {
     const scenario = await api("/api/generate", { body: { mode: "scenario", kind, topic, depth, count } });
+    await loader.finish();
     const prev = state.draft;
     const defaults = kind === "veikla" ? DEFAULT_ACTIVITY_TIMING : DEFAULT_TIMING;
     if (kind === "veikla") {
       scenario.activities = (scenario.activities || []).map((a) => ({ ...a, minutes: Number(a.minutes) || 30 }));
     }
+    state.notice = "";
     state.draft = {
+      stage: "review",
       kind,
       topic,
       depth,
       count,
       scenario,
       timing: prev?.timing && kindOf(prev) === kind ? { ...prev.timing } : { ...defaults },
-      date: prev && !prev.id && prev.date ? prev.date : defaultDate(),
+      date: meetingDate(),
     };
     saveDraft();
     renderResult();
     $("#result").scrollIntoView({ behavior: "smooth" });
     if (!state.archive) loadArchive().catch(() => {});
   } catch (e) {
+    loader.stop();
     showError(e.message);
   } finally {
-    btn.disabled = false;
-    btn.textContent = "Kurti scenarijų";
+    loader.remove();
+    btn.hidden = false;
   }
 }
 
-// ---------- Scenarijaus rodymas ----------
+// ---------- Scenarijaus eiga: peržiūra → nustatymai → paruošta ----------
 
 function editable(tag, props, text, onchange) {
   return h(tag, {
@@ -310,12 +334,42 @@ function editable(tag, props, text, onchange) {
   });
 }
 
+const STAGES = [["review", "Klausimai"], ["config", "Nustatymai"], ["ready", "Paruošta"]];
+
+function stepper(stage) {
+  const idx = STAGES.findIndex(([k]) => k === stage);
+  return h("ol", { class: "stepper" }, STAGES.map(([k, label], i) =>
+    h("li", { class: [i < idx && "done", i === idx && "now"].filter(Boolean).join(" ") },
+      h("span", { class: "step-dot", text: i < idx ? "✓" : String(i + 1) }),
+      h("span", { text: label })
+    )
+  ));
+}
+
+function setStage(stage) {
+  state.draft.stage = stage;
+  saveDraft();
+  renderResult();
+  $("#result").scrollIntoView({ behavior: "smooth" });
+}
+
 function renderResult() {
   const root = $("#result");
   const d = state.draft;
-  if (!d || !d.scenario) { root.replaceChildren(); return; }
-  const s = d.scenario;
+  const stage = d ? d.stage || "review" : null;
+  // Kol scenarijus peržiūrimas, forma lieka (galima kurti iš naujo); vėliau – paslepiama
+  $("#form").hidden = Boolean(d && stage !== "review");
+  if (!d || !d.scenario) {
+    root.replaceChildren(...(state.notice ? [h("div", { class: "card notice", text: state.notice })] : []));
+    return;
+  }
+  const kindLabel = kindOf(d) === "veikla" ? "veiklos" : "klausimai";
+  const body = stage === "config" ? renderConfig(d) : stage === "ready" ? renderReady(d) : renderReview(d, kindLabel);
+  root.replaceChildren(...[stepper(stage), body].flat(Infinity).filter(Boolean));
+}
 
+function contentBlocks(d) {
+  const s = d.scenario;
   const sections = sectionsFor(d).map(([key, title]) => {
     const list = s[key] || [];
     if (!list.length) return null;
@@ -329,17 +383,20 @@ function renderResult() {
       )),
     ];
   });
+  return [kindOf(d) === "veikla" ? activitiesBlock(d) : null, sections];
+}
 
-  root.replaceChildren(...[
+function renderReview(d, kindLabel) {
+  return [
     h("h2", { text: d.topic }),
-    h("p", { class: "hint", text: "Spustelk ant bet kurio teksto, kad jį pataisytum savais žodžiais." }),
-    editable("p", { class: "intro" }, s.intro || "", (v) => { s.intro = v; }),
-    kindOf(d) === "veikla" ? activitiesBlock(d) : null,
-    sections,
-    timingCard(),
-    actionsBar(),
-    h("div", { id: "invite" }),
-  ].flat(Infinity).filter(Boolean));
+    h("p", { class: "hint", text: "Spustelk ant bet kurio teksto, kad jį pataisytum savais žodžiais, arba spausk „Kitas“." }),
+    editable("p", { class: "intro" }, d.scenario.intro || "", (v) => { d.scenario.intro = v; }),
+    contentBlocks(d),
+    h("div", { class: "actions" },
+      h("button", { class: "primary small", type: "button", text: `✓ ${kindLabel === "veiklos" ? "Veiklos" : "Klausimai"} tinka`, onclick: () => setStage("config") }),
+      newScenarioButton()
+    ),
+  ];
 }
 
 function activitiesBlock(d) {
@@ -355,24 +412,14 @@ function activitiesBlock(d) {
         ),
         editable("p", { class: "activity-desc" }, a.description || "", (v) => { a.description = v; }),
         h("div", { class: "activity-meta" },
-          h("label", { class: "mini inline" },
-            h("input", {
-              type: "number", min: "0", max: "180", inputmode: "numeric", value: a.minutes || 0,
-              oninput: (e) => {
-                a.minutes = Math.max(0, Math.min(180, Number(e.target.value) || 0));
-                saveDraft();
-                updatePlanTotal();
-              },
-            }),
-            "min."
-          ),
-          h("span", { class: "hint", style: "margin:0" }, "Reikės: "),
+          h("span", { class: "hint", style: "margin:0", text: `~${a.minutes || 0} min. · Reikės:` }),
           editable("span", { class: "materials" }, a.materials || "—", (v) => { a.materials = v === "—" ? "" : v; })
         )
       )
     ),
   ];
 }
+
 async function swap(section, index, btn) {
   const d = state.draft;
   const label = btn.textContent;
@@ -402,6 +449,7 @@ async function swap(section, index, btn) {
     alert(e.message);
   }
 }
+
 // Kiek minučių suplanuota (su įsižeminimu)
 function planMinutes(d) {
   const t = d.timing || {};
@@ -415,141 +463,146 @@ function planMinutes(d) {
   return mins;
 }
 
-let updatePlanTotal = () => {};
+function dateLine(d) {
+  return d.date
+    ? `📅 ${fmtDate(d.date)}, ${MEETING_START}–${endTime(MEETING_START)}`
+    : "📅 Data dar nenubalsuota – kai bus patvirtinta kalendoriuje, atsiras čia automatiškai.";
+}
 
-function timingCard() {
-  const d = state.draft;
+function renderConfig(d) {
   const veikla = kindOf(d) === "veikla";
   d.timing = d.timing || { ...(veikla ? DEFAULT_ACTIVITY_TIMING : DEFAULT_TIMING) };
+  if (!d.date && meetingDate()) d.date = meetingDate();
   const total = h("p", { class: "hint" });
-  updatePlanTotal = () => {
+  const update = () => {
     const mins = planMinutes(d);
     const left = MEETING_MINUTES - mins;
     total.textContent =
-      `Suplanuota ${fmtMinutes(mins)} iš 3 val. (${MEETING_START}–${endTime(MEETING_START)}), įskaitant ${GROUNDING.minutes} min. įsižeminimą. ` +
+      `Suplanuota ${fmtMinutes(mins)} iš 3 val., įskaitant ${GROUNDING.minutes} min. įsižeminimą. ` +
       (left >= 0 ? `Laisvo laiko lieka ${fmtMinutes(left)}` : `Viršyta ${fmtMinutes(-left)}`);
     total.classList.toggle("over-plan", left < 0);
   };
-  const minutes = (key, label) =>
-    h("label", { class: "mini" }, label,
-      h("input", {
-        type: "number", min: "0", max: "60", inputmode: "numeric", value: d.timing[key] ?? 0,
-        oninput: (e) => {
-          d.timing[key] = Math.max(0, Math.min(60, Number(e.target.value) || 0));
-          saveDraft();
-          updatePlanTotal();
-        },
-      })
-    );
-  updatePlanTotal();
-  return h("div", { class: "card timing" },
-    h("h2", { text: "Vakaro planas" }),
-    h("div", { class: "row" },
-      h("label", { class: "mini" }, "Susitikimo data",
-        h("input", { type: "date", value: d.date || "", oninput: (e) => { d.date = e.target.value; saveDraft(); } })
-      )
-    ),
+  const number = (value, onInput, max = 60) => h("input", {
+    type: "number", min: "0", max: String(max), inputmode: "numeric", value: value ?? 0,
+    oninput: (e) => { onInput(Math.max(0, Math.min(max, Number(e.target.value) || 0))); saveDraft(); update(); },
+  });
+  const minutes = (key, label) => h("label", { class: "mini" }, label, number(d.timing[key], (v) => { d.timing[key] = v; }));
+  update();
+
+  const confirmBtn = h("button", { class: "primary small", type: "button", text: "✓ Patvirtinti" });
+  confirmBtn.onclick = () => confirmPlan(confirmBtn);
+
+  return h("div", { class: "card" },
+    h("h2", { text: d.topic }),
+    h("p", { class: "meeting-line", text: dateLine(d) }),
     veikla
       ? [
-          h("p", { class: "hint", style: "margin-top:16px", text: "Veiklų trukmę keisk prie kiekvienos veiklos." }),
-          h("div", { class: "row", style: "margin-top:10px" }, minutes("closing", "Užbaigimo klausimui (min.)")),
+          h("p", { class: "label", style: "margin-top:16px", text: "Veiklų trukmė (min.)" }),
+          (d.scenario.activities || []).map((a) =>
+            h("label", { class: "mini inline-row" }, h("span", { text: a.title }), number(a.minutes, (v) => { a.minutes = v; }, 180))
+          ),
+          h("label", { class: "mini inline-row" }, h("span", { text: "Užbaigimo klausimas" }), number(d.timing.closing, (v) => { d.timing.closing = v; })),
         ]
       : [
-          h("p", { class: "label", style: "margin-top:16px", text: "Minutės vienam klausimui" }),
+          h("p", { class: "label", style: "margin-top:16px", text: "Vieno klausimo trukmė (min.)" }),
           h("div", { class: "row" }, minutes("warmup", "Apšilimas"), minutes("main", "Pagrindiniai"), minutes("closing", "Užbaigimas")),
         ],
-    total
-  );
-}
-function actionsBar() {
-  const d = state.draft;
-  const copy = h("button", { class: "secondary", type: "button", text: "Kopijuoti" });
-  copy.onclick = async () => {
-    try {
-      await navigator.clipboard.writeText(asText());
-      copy.textContent = "Nukopijuota ✓";
-    } catch (e) {
-      copy.textContent = "Nepavyko nukopijuoti";
-    }
-    setTimeout(() => (copy.textContent = "Kopijuoti"), 2000);
-  };
-  const save = h("button", { class: "secondary save-btn", type: "button", text: d.id ? "Atnaujinti archyve" : "Išsaugoti archyve" });
-  save.onclick = () => saveToArchive(save);
-  return h("div", { class: "actions" },
-    h("button", { class: "primary small", type: "button", text: "▶ Vedančiosios režimas", onclick: openHost }),
-    h("button", { class: "secondary", type: "button", text: "✉ Kvietimo žinutė", onclick: toggleInvite }),
-    save,
-    d.id && d.date && d.date >= today() ? revealButton(d) : null,
-    copy,
-    h("button", { class: "secondary", type: "button", text: "Spausdinti", onclick: () => window.print() }),
-    h("button", {
-      class: "secondary",
-      type: "button",
-      text: "Naujas scenarijus",
-      onclick: () => {
-        if (confirm("Išvalyti šį scenarijų ir pradėti naują? Archyve išsaugotas liks.")) {
-          clearDraft();
-          window.scrollTo(0, 0);
-        }
-      },
-    })
+    total,
+    h("div", { class: "actions" },
+      h("button", { class: "secondary", type: "button", text: `← Atgal prie ${veikla ? "veiklų" : "klausimų"}`, onclick: () => setStage("review") }),
+      confirmBtn
+    )
   );
 }
 
-function asText() {
+const entryOf = (d, status) => ({
+  id: d.id, status, kind: kindOf(d), date: d.date || "", topic: d.topic, depth: d.depth, count: d.count, scenario: d.scenario, timing: d.timing,
+});
+
+async function confirmPlan(btn) {
   const d = state.draft;
-  const lines = [`Tema: ${d.topic}`];
-  if (d.date) lines.push(`Data: ${fmtDate(d.date)}, ${MEETING_START}–${endTime(MEETING_START)}`);
-  lines.push("", `Įsižeminimas (${GROUNDING.minutes} min.)`, "", d.scenario.intro || "");
-  if (kindOf(d) === "veikla") {
-    lines.push("", "Veiklos");
-    (d.scenario.activities || []).forEach((a, i) => {
-      lines.push(`${i + 1}. ${a.title} (${a.minutes || 0} min.)`, `   ${a.description}`);
-      if (a.materials) lines.push(`   Reikės: ${a.materials}`);
-    });
-  }
-  for (const [key, title] of sectionsFor(d)) {
-    const list = d.scenario[key] || [];
-    if (!list.length) continue;
-    lines.push("", title);
-    list.forEach((q, i) => lines.push(`${i + 1}. ${q}`));
-  }
-  return lines.join("\n");
-}
-async function saveToArchive(btn) {
-  const d = state.draft;
-  if (!d.date) {
-    alert("Įrašyk susitikimo datą „Vakaro plane“ – pagal ją tema atsivers kitoms narėms po susitikimo.");
-    const input = $("#result .timing input[type=date]");
-    if (input) input.focus();
-    return;
-  }
   btn.disabled = true;
   btn.textContent = "Saugoma…";
   try {
-    const { item } = await api("/api/archive", {
-      body: { entry: { id: d.id, kind: kindOf(d), date: d.date, topic: d.topic, depth: d.depth, count: d.count, scenario: d.scenario, timing: d.timing } },
-    });
-    const wasNew = !d.id;
+    const { item } = await api("/api/archive", { body: { entry: entryOf(d, "planned") } });
     d.id = item.id;
     d.revealed = item.revealed;
-    saveDraft();
-    if (wasNew) {
-      // atsiranda mygtukas „Paskelbti temą narėms“
-      renderResult();
-      btn = $("#result .save-btn");
-    }
-    if (state.archive) {
-      state.archive = [item, ...state.archive.filter((i) => i.id !== item.id)];
-    }
-    btn.textContent = "Išsaugota ✓";
-    setTimeout(() => (btn.textContent = "Atnaujinti archyve"), 2000);
+    setStage("ready");
   } catch (e) {
-    btn.textContent = d.id ? "Atnaujinti archyve" : "Išsaugoti archyve";
-    alert(e.message);
-  } finally {
     btn.disabled = false;
+    btn.textContent = "✓ Patvirtinti";
+    alert(e.message);
   }
+}
+
+// Suplanuotą susitikimą tyliai atnaujina serveryje (pvz., kai paaiškėja data)
+function syncPlan() {
+  const d = state.draft;
+  if (d && d.id && d.stage === "ready") api("/api/archive", { body: { entry: entryOf(d, "planned") } }).catch(() => {});
+}
+
+function renderReady(d) {
+  const count = kindOf(d) === "veikla"
+    ? `${(d.scenario.activities || []).length} veiklos`
+    : `${SECTIONS.reduce((n, [k]) => n + (d.scenario[k] || []).length, 0)} klausimai`;
+  const preview = h("details", { class: "preview" },
+    h("summary", { text: "Peržiūrėti programą" }),
+    d.scenario.intro ? h("p", { class: "hint", style: "font-style:italic", text: d.scenario.intro }) : null,
+    (d.scenario.activities || []).length
+      ? [h("h3", { text: "Veiklos" }), h("ol", {}, d.scenario.activities.map((a) => h("li", { class: "plain", text: `${a.title} (${a.minutes || 0} min.)` })))]
+      : null,
+    sectionsFor(d).map(([k, title]) => (d.scenario[k] || []).length
+      ? [h("h3", { text: title }), h("ol", {}, d.scenario[k].map((q) => h("li", { class: "plain", text: q })))]
+      : null)
+  );
+  return [
+    h("div", { class: "card ready" },
+      h("p", { class: "label", text: kindOf(d) === "veikla" ? "🎨 Veiklų vakaras" : "💬 Pokalbis" }),
+      h("h2", { text: d.topic }),
+      h("p", { class: "meeting-line", text: dateLine(d) }),
+      h("p", { class: "hint", text: `${count} · planas ${fmtMinutes(planMinutes(d))}` }),
+      h("p", { class: "topic-state", text: d.revealed ? "📣 Tema paskelbta narėms" : "🤫 Tema kol kas paslaptis" }),
+      h("div", { class: "actions" },
+        h("button", { class: "primary small", type: "button", text: "▶ Pradėti susitikimą", onclick: openHost }),
+        revealButton(d),
+        h("button", { class: "secondary", type: "button", text: "✉ Kvietimas narėms", onclick: toggleInvite })
+      ),
+      h("div", { id: "invite" }),
+      preview,
+      h("div", { class: "actions subtle" },
+        h("button", { class: "link", type: "button", text: "✏️ Redaguoti", onclick: () => setStage("review") }),
+        newScenarioButton()
+      )
+    ),
+  ];
+}
+
+function newScenarioButton() {
+  return h("button", {
+    class: "link",
+    type: "button",
+    text: "Naujas scenarijus",
+    onclick: async () => {
+      const d = state.draft;
+      const planned = d && d.id;
+      if (!confirm(planned ? "Pradėti naują scenarijų? Šis suplanuotas susitikimas bus ištrintas." : "Išvalyti šį scenarijų ir pradėti naują?")) return;
+      if (planned) {
+        try { await api(`/api/archive?id=${encodeURIComponent(d.id)}`, { method: "DELETE" }); } catch (e) {}
+        if (state.archive) state.archive = state.archive.filter((i) => i.id !== d.id);
+      }
+      clearDraft();
+      window.scrollTo(0, 0);
+    },
+  });
+}
+
+async function completeMeeting() {
+  const d = state.draft;
+  const { item } = await api("/api/archive", { body: { entry: { ...entryOf(d, "done"), date: d.date || today() } } });
+  if (state.archive) state.archive = [item, ...state.archive.filter((i) => i.id !== item.id)];
+  clearDraft();
+  state.notice = `Susitikimas „${item.topic}“ išsaugotas archyve 💛`;
+  renderResult();
 }
 
 // ---------- Kvietimo žinutė ----------
@@ -569,17 +622,21 @@ function toggleInvite() {
     try { await navigator.clipboard.writeText(out.value); copy.textContent = "Nukopijuota ✓"; } catch (e) { out.select(); }
     setTimeout(() => (copy.textContent = "Kopijuoti žinutę"), 2000);
   };
+  const share = navigator.share
+    ? h("button", { class: "secondary", type: "button", text: "Dalintis…", hidden: true, onclick: () => navigator.share({ text: out.value }).catch(() => {}) })
+    : null;
   const go = h("button", { class: "primary small", type: "button", text: "Sukurti žinutę" });
   go.onclick = async () => {
     err.hidden = true;
-    go.disabled = true;
-    go.textContent = "Rašoma…";
+    go.hidden = true;
+    const loader = catLoader("Rašoma");
+    go.after(loader);
     try {
       const { message } = await api("/api/generate", {
         body: {
           mode: "invite",
           kind: kindOf(d),
-          topic: d.topic,
+          topic: d.revealed ? d.topic : `${d.topic} (tema dar slapta – kvietime jos neminėk, tik užsimink, kad bus staigmena)`,
           date: d.date ? fmtDate(d.date) : "",
           time: time.value ? `${time.value}–${endTime(time.value)}` : "",
           place: place.value,
@@ -589,27 +646,30 @@ function toggleInvite() {
             : "",
         },
       });
+      await loader.finish();
       out.value = message || "";
       out.hidden = false;
       copy.hidden = false;
+      if (share) share.hidden = false;
+      go.textContent = "Sukurti kitą variantą";
     } catch (e) {
+      loader.stop();
       err.textContent = e.message;
       err.hidden = false;
     } finally {
-      go.disabled = false;
-      go.textContent = "Sukurti kitą variantą";
+      loader.remove();
+      go.hidden = false;
     }
   };
   box.replaceChildren(
-    h("div", { class: "card" },
-      h("h2", { text: "Kvietimo žinutė" }),
-      h("p", { class: "hint", style: "margin:0 0 14px", text: d.date ? `Data: ${fmtDate(d.date)} (keičiama „Vakaro plane“)` : "Datą gali nurodyti „Vakaro plane“." }),
-      h("div", { class: "row" }, h("label", { class: "mini" }, "Laikas", time), h("label", { class: "mini" }, "Vieta", place)),
+    h("div", { class: "invite-box" },
+      h("p", { class: "hint", style: "margin:0 0 12px", text: d.revealed ? "Kvietime bus paminėta tema." : "Tema dar slapta – kvietime ji nebus atskleista." }),
+      h("div", { class: "row" }, h("label", { class: "mini" }, "Pradžia", time), h("label", { class: "mini" }, "Vieta", place)),
       h("label", { class: "mini", style: "margin-top:10px" }, "Ką dar pridėti (nebūtina)", note),
       h("div", { class: "actions", style: "margin-top:14px" }, go),
       err,
       h("div", { style: "margin-top:14px" }, out),
-      h("div", { class: "actions", style: "margin-top:10px" }, copy)
+      h("div", { class: "actions", style: "margin-top:10px" }, copy, share)
     )
   );
 }
@@ -677,6 +737,47 @@ function openHost() {
   renderHost();
 }
 
+// Paskutinė skaidrė: ar susitikimas įvyko? Tada – į archyvą
+function showFinish() {
+  clearInterval(host.timer);
+  const err = h("p", { class: "error", hidden: true });
+  const yes = h("button", { class: "next", type: "button", text: "✓ Taip, susitikimas įvyko" });
+  yes.onclick = async () => {
+    yes.disabled = true;
+    yes.textContent = "Saugoma…";
+    try {
+      await completeMeeting();
+      closeHost();
+      location.hash = "#scenarijus";
+      window.scrollTo(0, 0);
+    } catch (e) {
+      err.textContent = e.message;
+      err.hidden = false;
+      yes.disabled = false;
+      yes.textContent = "✓ Taip, susitikimas įvyko";
+    }
+  };
+  $("#host").replaceChildren(
+    h("div", { class: "host-top" },
+      h("span", { class: "host-label", text: "Pabaiga" }),
+      h("span", { text: `Vakaras ${fmtClock(host.total)}` }),
+      h("button", { class: "host-close", type: "button", "aria-label": "Uždaryti", text: "✕", onclick: closeHost })
+    ),
+    h("div", { class: "host-body" },
+      h("div", { class: "finish" },
+        h("p", { class: "host-q", text: "Ačiū už vakarą 💛" }),
+        h("p", { class: "host-sub", text: "Ar susitikimas įvyko? Patvirtinus jis bus išsaugotas archyve, o tema ir klausimai atsivers visoms." }),
+        h("div", { class: "finish-actions" },
+          yes,
+          h("button", { class: "secondary", type: "button", text: "Grįžti į susitikimą", onclick: () => { closeHost(); openHost(); host.i = host.slides.length - 1; renderHost(); } }),
+          h("button", { class: "secondary", type: "button", text: "Uždaryti neišsaugant", onclick: closeHost })
+        ),
+        err
+      )
+    )
+  );
+}
+
 function closeHost() {
   clearInterval(host.timer);
   document.removeEventListener("keydown", hostKeys);
@@ -701,7 +802,7 @@ function resetSlide() {
 
 function move(delta) {
   const n = host.i + delta;
-  if (n >= host.slides.length) { closeHost(); return; }
+  if (n >= host.slides.length) { showFinish(); return; }
   if (n < 0) return;
   host.i = n;
   resetSlide();
@@ -826,11 +927,11 @@ async function renderArchive() {
     root.replaceChildren(h("p", { class: "error", text: e.message }));
     return;
   }
-  const items = state.archive;
+  const items = state.archive.filter((i) => i.status !== "planned");
   root.replaceChildren(
     items.length
       ? h("div", {}, items.map(archiveCard))
-      : h("div", { class: "card" }, h("p", { style: "margin:0", text: "Archyvas dar tuščias. Sukurk scenarijų ir paspausk „Išsaugoti archyve“." }))
+      : h("div", { class: "card" }, h("p", { style: "margin:0", text: "Archyvas dar tuščias. Susitikimas čia atsiras, kai vedančioji jo pabaigoje patvirtins, kad jis įvyko." }))
   );
 }
 
@@ -842,7 +943,6 @@ function archiveCard(item) {
       h("p", { class: "hint", text: `${item.host ? `Veda ${item.host}. ` : ""}${item.topic ? "Visa programa" : "Tema ir programa"} atsivers po susitikimo.` })
     );
   }
-  const upcoming = item.date >= today();
   const depth = (DEPTHS.find(([v]) => v === item.depth) || [])[1];
   const kindLabel = kindOf(item) === "veikla" ? "🎨 Veiklos" : "💬 Pokalbis";
   const acts = item.scenario.activities || [];
@@ -871,12 +971,11 @@ function archiveCard(item) {
   return h("article", { class: "card item" },
     h("p", { class: "date", text: fmtDate(item.date) }),
     h("h3", { text: item.topic }),
-    h("p", { class: "hint", text: [kindLabel, depth, item.host && `išsaugojo ${item.host}`, upcoming && (item.revealed ? "📣 tema paskelbta narėms" : "🤫 kitoms dar paslaptis")].filter(Boolean).join(" · ") }),
+    h("p", { class: "hint", text: [kindLabel, depth, item.host && `vedė ${item.host}`].filter(Boolean).join(" · ") }),
     details,
     h("div", { class: "actions" },
-      upcoming ? revealButton(item) : null,
       toggle,
-      h("button", { class: "secondary small", type: "button", text: "Atidaryti", onclick: () => openArchived(item) }),
+      h("button", { class: "secondary small", type: "button", text: "Naudoti dar kartą", onclick: () => openArchived(item) }),
       h("button", { class: "secondary small", type: "button", text: "Ištrinti", onclick: () => deleteArchived(item) })
     )
   );
@@ -884,7 +983,7 @@ function archiveCard(item) {
 
 function revealButton(item) {
   const btn = h("button", {
-    class: item.revealed ? "secondary small" : "primary small",
+    class: "secondary",
     type: "button",
     text: item.revealed ? "Vėl paslėpti temą" : "📣 Paskelbti temą narėms",
   });
@@ -909,7 +1008,13 @@ function revealButton(item) {
 }
 
 function openArchived(item) {
-  state.draft = JSON.parse(JSON.stringify(item));
+  if (state.draft && state.draft.id && !confirm("Dabartinis scenarijus bus pakeistas. Tęsti?")) return;
+  const copy = JSON.parse(JSON.stringify(item));
+  state.draft = {
+    stage: "review", kind: copy.kind, topic: copy.topic, depth: copy.depth, count: copy.count,
+    scenario: copy.scenario, timing: copy.timing, date: meetingDate(),
+  };
+  state.notice = "";
   saveDraft();
   $("#topic").value = item.topic;
   renderChips();
@@ -1116,6 +1221,19 @@ function renderAuth(root) {
 async function loadCalendar() {
   state.calendar = await api("/api/calendar", { method: "GET" });
   state.meeting = state.calendar.meeting;
+  syncDraftDate();
+}
+
+// Kai balsavimu patvirtinama data, ji įrašoma į vedančiosios planą
+function syncDraftDate() {
+  const d = state.draft;
+  const m = state.meeting;
+  if (!d || !m || !m.date || d.date === m.date || !state.me) return;
+  if ((m.host || "").toLowerCase() !== state.me.name.toLowerCase()) return;
+  d.date = m.date;
+  saveDraft();
+  syncPlan();
+  renderResult();
 }
 
 async function renderCalendar() {
@@ -1297,7 +1415,11 @@ function meetingCard(cal) {
   return h("div", { class: "card meeting" },
     h("p", { class: "label", text: "Kitas susitikimas" }),
     h("p", { class: "big", text: `${fmtDate(m.date)}, ${m.time || MEETING_START}–${endTime(m.time || MEETING_START)}` }),
-    h("p", { style: "margin:0 0 12px", text: `Veda: ${m.host || "—"}` }),
+    h("p", { style: "margin:0 0 4px", text: `Veda: ${m.host || "—"}` }),
+    h("p", { style: "margin:0 0 12px", text:
+      m.topicState === "revealed" ? `Tema: ${m.topic}${m.kind === "veikla" ? " (veiklų vakaras)" : ""}`
+      : m.topicState === "secret" ? "Tema: 🤫 staigmena"
+      : "Tema dar nesuplanuota" }),
     h("div", { class: "row" }, h("label", { class: "mini" }, "Pradžia", time), h("label", { class: "mini" }, "Vieta", place)),
     h("div", { class: "actions" },
       h("button", { class: "secondary small", type: "button", text: "Išsaugoti", onclick: () => setMeeting({ ...m, time: time.value, place: place.value }) }),

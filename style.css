@@ -151,6 +151,41 @@ li::before { content: counter(q) "."; color: var(--accent); font-weight: 600; }
 }
 .swap:hover { color: var(--accent); border-color: var(--accent); }
 .timing { margin-top: 28px; }
+/* Eiga */
+.stepper { display: flex; gap: 6px; list-style: none; padding: 0; margin: 0 0 18px; counter-reset: none; }
+.stepper li { display: flex; align-items: center; gap: 6px; border: 0; padding: 0; color: var(--muted); font-size: .85rem; flex: 1; grid-template-columns: none; }
+.stepper li::before { content: none; }
+.stepper li + li::before { content: ""; display: block; flex: 0 0 14px; height: 2px; background: var(--line); margin-right: 2px; }
+.step-dot { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--line); display: inline-flex; align-items: center; justify-content: center; font-size: .72rem; font-weight: 700; flex: none; }
+.stepper li.now { color: var(--ink); font-weight: 600; }
+.stepper li.now .step-dot { background: var(--accent); border-color: var(--accent); color: #fff; }
+.stepper li.done .step-dot { background: var(--accent-soft); border-color: var(--accent-soft); color: var(--accent); }
+.meeting-line { font-weight: 500; margin: 0; }
+.inline-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); margin: 0; }
+.inline-row input { width: 80px; margin: 0; padding: 6px 8px; }
+.ready .topic-state { margin: 10px 0 0; font-weight: 500; }
+.ready h2 { margin-top: 4px; }
+.preview { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
+.preview summary { cursor: pointer; color: var(--accent); font-weight: 500; }
+.preview h3 { font-size: 1rem; margin: 14px 0 4px; }
+.actions.subtle { justify-content: space-between; margin-top: 16px; }
+.invite-box { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.notice { text-align: center; font-weight: 500; }
+/* Katinėlis */
+.cat-loader { margin-top: 4px; }
+.cat-text { margin: 0 0 6px; font-weight: 600; color: var(--accent); }
+.cat-text::after { content: ""; animation: dots 1.2s steps(4) infinite; }
+@keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+.cat-track { position: relative; height: 10px; border-radius: 99px; background: var(--line); margin: 30px 16px 6px 16px; }
+.cat-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 99px; background: var(--accent); transition: width .3s linear; }
+.cat { position: absolute; bottom: 4px; left: 0; font-size: 28px; line-height: 1; margin-left: -14px; transition: left .3s linear; animation: run .35s ease-in-out infinite alternate; }
+@keyframes run { from { transform: scaleX(-1) translateY(0) rotate(-4deg); } to { transform: scaleX(-1) translateY(-5px) rotate(4deg); } }
+@media (prefers-reduced-motion: reduce) { .cat { animation: none; transform: scaleX(-1); } }
+/* Pabaiga */
+.finish { text-align: center; max-width: 520px; margin: 0 auto; }
+.finish-actions { display: grid; gap: 10px; margin-top: 24px; }
+.finish-actions button { padding: 14px; font-size: 1rem; }
+.finish-actions .next { background: var(--accent); color: #fff; }
 .over-plan { color: var(--error); }
 .activity { border-bottom: 1px solid var(--line); padding: 14px 0; }
 .activity-head { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: start; }
