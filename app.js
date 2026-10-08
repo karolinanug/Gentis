@@ -738,11 +738,11 @@ function googleButton(onCredential, onError) {
 }
 
 function googleCard(fail) {
-  const card = h("div", { class: "card" }, h("h2", { text: "Greičiausia – su Google" }));
+  const card = h("div", { class: "card google-card" }, h("p", { class: "label", text: "Greičiausia – su Google" }));
   const onCredential = async (credential) => {
     try {
       const r = await api("/api/auth", { body: { action: "google", credential } });
-      if (r.token) { setSession(r.token, r.user); renderCalendar(); return; }
+      if (r.token) { setSession(r.token, r.user); enterApp(); return; }
       if (r.needsSignup) showSignup(credential, r.suggestedName);
     } catch (x) { fail(x); }
   };
@@ -762,7 +762,7 @@ function googleCard(fail) {
         state.code = code.value.trim();
         ls.set("burelioKodas", state.code);
         setSession(r.token, r.user);
-        renderCalendar();
+        enterApp();
       } catch (x) { fail(x); }
     };
     card.replaceChildren(h("h2", { text: "Sveika!" }), form);
@@ -777,11 +777,10 @@ function renderAuth(root) {
 
   const lName = h("input", { type: "text", autocomplete: "username", required: true });
   const lPass = h("input", { type: "password", autocomplete: "current-password", required: true });
-  const login = h("form", { class: "card" },
-    h("h2", { text: "Prisijungti" }),
+  const login = h("form", {},
     h("label", { class: "mini" }, "Vardas", lName),
     h("label", { class: "mini", style: "margin-top:10px" }, "Slaptažodis", lPass),
-    h("div", { class: "actions" }, h("button", { class: "primary small", type: "submit", text: "Prisijungti" }))
+    h("button", { class: "primary", style: "margin-top:16px", type: "submit", text: "Prisijungti" })
   );
   login.onsubmit = async (e) => {
     e.preventDefault();
@@ -789,19 +788,18 @@ function renderAuth(root) {
     try {
       const r = await api("/api/auth", { body: { action: "login", name: lName.value, password: lPass.value } });
       setSession(r.token, r.user);
-      renderCalendar();
+      enterApp();
     } catch (x) { fail(x); }
   };
 
   const rName = h("input", { type: "text", autocomplete: "username", required: true, maxlength: "40" });
   const rPass = h("input", { type: "password", autocomplete: "new-password", required: true, minlength: "6" });
   const rCode = h("input", { type: "password", required: true, value: state.code });
-  const register = h("form", { class: "card" },
-    h("h2", { text: "Susikurti paskyrą" }),
+  const register = h("form", { hidden: true },
     h("label", { class: "mini" }, "Vardas (taip tave matys kitos)", rName),
     h("label", { class: "mini", style: "margin-top:10px" }, "Slaptažodis (bent 6 simboliai)", rPass),
     h("label", { class: "mini", style: "margin-top:10px" }, "Būrelio kodas", rCode),
-    h("div", { class: "actions" }, h("button", { class: "primary small", type: "submit", text: "Susikurti" }))
+    h("button", { class: "primary", style: "margin-top:16px", type: "submit", text: "Susikurti paskyrą" })
   );
   register.onsubmit = async (e) => {
     e.preventDefault();
@@ -811,17 +809,34 @@ function renderAuth(root) {
       state.code = rCode.value.trim();
       ls.set("burelioKodas", state.code);
       setSession(r.token, r.user);
-      renderCalendar();
+      enterApp();
     } catch (x) { fail(x); }
   };
 
+  const title = h("h2", { text: "Prisijungti" });
+  const toggle = h("button", { class: "link", type: "button" });
+  const setMode = (signup) => {
+    login.hidden = signup;
+    register.hidden = !signup;
+    title.textContent = signup ? "Nauja paskyra" : "Prisijungti";
+    toggle.textContent = signup ? "Jau turi paskyrą? Prisijunk" : "Neturi paskyros? Susikurk";
+    err.hidden = true;
+  };
+  toggle.onclick = () => setMode(register.hidden);
+  setMode(false);
+
   root.replaceChildren(...[
-    h("p", { class: "hint", style: "margin:0 0 16px", text: "Kalendoriui reikia paskyros – taip matysime, kuri narė kada gali." }),
-    err,
+    h("h1", { text: "Būrelio vakaras" }),
+    h("p", { class: "lead", text: "Mūsų būrelio susitikimų planavimas: temos, klausimai ir kito susitikimo data." }),
     state.googleClientId ? googleCard(fail) : null,
-    state.googleClientId ? h("p", { class: "hint", style: "margin:0 0 16px", text: "Arba su vardu ir slaptažodžiu:" }) : null,
-    login,
-    register,
+    h("div", { class: "card" },
+      title,
+      login,
+      register,
+      err,
+      h("p", { style: "margin:16px 0 0;text-align:center" }, toggle)
+    ),
+    h("p", { class: "hint", style: "text-align:center" }, h("a", { href: "privacy.html", text: "Privatumo politika" })),
   ].filter(Boolean));
 }
 
@@ -834,12 +849,12 @@ async function loadCalendar() {
 
 async function renderCalendar() {
   const root = $("#tab-kalendorius");
-  if (!state.me) return renderAuth(root);
+  if (!state.me) return showAuth();
   root.replaceChildren(h("p", { class: "hint", text: "Kraunama…" }));
   try {
     await loadCalendar();
   } catch (e) {
-    if (e.status === 401) { setSession(null, null); return renderAuth(root); }
+    if (e.status === 401) return showAuth();
     root.replaceChildren(h("p", { class: "error", text: e.message }));
     return;
   }
@@ -848,8 +863,7 @@ async function renderCalendar() {
 
 async function logout() {
   try { await api("/api/auth", { body: { action: "logout" } }); } catch (e) {}
-  setSession(null, null);
-  renderCalendar();
+  showAuth();
 }
 
 function showLinkGoogle() {
@@ -864,8 +878,8 @@ function showLinkGoogle() {
         try {
           const r = await api("/api/auth", { body: { action: "link-google", credential } });
           state.me = r.user;
-          drawCalendar();
-          setCalStatus("Google paskyra susieta ✓");
+          renderUserBar();
+          box.replaceChildren(h("p", { class: "hint", style: "margin:0 0 16px", text: "Google paskyra susieta ✓" }));
         } catch (x) { fail(x); }
       }, fail),
       err
@@ -983,16 +997,6 @@ function drawCalendar() {
   const missing = members.filter((m) => !(cal.availability[m.id] || []).length).map((m) => m.name);
 
   $("#tab-kalendorius").replaceChildren(
-    h("div", { class: "who" },
-      h("span", { text: `Prisijungusi: ${state.me.name}` }),
-      h("span", { class: "who-links" },
-        state.googleClientId && !state.me.google
-          ? h("button", { class: "link", type: "button", text: "Susieti su Google", onclick: showLinkGoogle })
-          : null,
-        h("button", { class: "link", type: "button", text: "Atsijungti", onclick: logout })
-      )
-    ),
-    h("div", { id: "link-google" }),
     meetingCard(cal),
     h("div", { class: "card" },
       h("h2", { text: "Kada gali?" }),
@@ -1033,6 +1037,39 @@ function drawCalendar() {
   );
 }
 
+// ---------- Prisijungimas / programa ----------
+
+function renderUserBar() {
+  $("#userbar").replaceChildren(...[
+    h("span", { text: state.me.name }),
+    state.googleClientId && !state.me.google
+      ? h("button", { class: "link", type: "button", text: "Susieti su Google", onclick: showLinkGoogle })
+      : null,
+    h("button", { class: "link", type: "button", text: "Atsijungti", onclick: logout }),
+  ].filter(Boolean));
+}
+
+function showAuth() {
+  setSession(null, null);
+  state.archive = null;
+  state.calendar = null;
+  $("#app").hidden = true;
+  $("#auth").hidden = false;
+  renderAuth($("#auth"));
+}
+
+function enterApp() {
+  $("#auth").hidden = true;
+  $("#auth").replaceChildren();
+  $("#app").hidden = false;
+  $("#link-google").replaceChildren();
+  renderUserBar();
+  updateCodeField();
+  showTab();
+  if (!state.archive) loadArchive().catch(() => {});
+  if (!state.calendar) loadCalendar().catch(() => {});
+}
+
 // ---------- Paleidimas ----------
 
 async function init() {
@@ -1051,18 +1088,13 @@ async function init() {
     try {
       state.me = (await api("/api/auth", { body: { action: "me" } })).user;
     } catch (e) {
-      if (e.status === 401) setSession(null, null);
+      state.me = null;
     }
   }
-  updateCodeField();
   renderResult();
-  window.addEventListener("hashchange", showTab);
-  showTab();
-
-  if (hasAccess()) {
-    if (!state.archive) loadArchive().catch(() => {});
-    if (state.me && !state.calendar) loadCalendar().catch(() => {});
-  }
+  window.addEventListener("hashchange", () => { if (state.me) showTab(); });
+  if (state.me) enterApp();
+  else showAuth();
 }
 
 init();

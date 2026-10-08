@@ -6,6 +6,10 @@ const store = require("../lib/store");
 const auth = require("../lib/auth");
 
 module.exports = async (req, res) => {
+  // GET /api/auth – greitas patikrinimas naršyklėje, ar nustatytas Google Client ID
+  if (req.method === "GET" || (req.body && req.body.action === "config")) {
+    return res.status(200).json({ googleClientId: process.env.GOOGLE_CLIENT_ID || null });
+  }
   if (req.method !== "POST") return res.status(405).json({ error: "Naudok POST" });
   if (!store.enabled()) return res.status(503).json({ error: store.MISSING });
 
@@ -15,10 +19,6 @@ module.exports = async (req, res) => {
   const badName = cleanName.length < 2 || cleanName.length > 40;
 
   try {
-    if (action === "config") {
-      return res.status(200).json({ googleClientId: process.env.GOOGLE_CLIENT_ID || null });
-    }
-
     if (action === "google") {
       const g = await auth.verifyGoogle(credential);
       if (!g) return res.status(401).json({ error: "Nepavyko prisijungti su Google, pabandyk dar kartą" });

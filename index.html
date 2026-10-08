@@ -10,9 +10,15 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main>
+  <main id="auth" class="auth" hidden></main>
+
+  <main id="app" hidden>
     <header class="top">
-      <h1>Būrelio vakaras</h1>
+      <div class="top-row">
+        <h1>Būrelio vakaras</h1>
+        <div class="userbar" id="userbar"></div>
+      </div>
+      <div id="link-google"></div>
       <nav class="tabs">
         <a href="#scenarijus" data-tab="scenarijus">Scenarijus</a>
         <a href="#archyvas" data-tab="archyvas">Archyvas</a>
