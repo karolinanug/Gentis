@@ -46,6 +46,8 @@ async function settle(today) {
     rotation.lastDate = meeting.date;
     await saveRotation(rotation);
     await store.cmd("DEL", "meeting");
+    await store.cmd("DEL", "avail"); // naujas balsavimas – nuo tuščio kalendoriaus
+    await store.cmd("DEL", "absent");
     meeting = null;
   }
   return { rotation, meeting };
@@ -234,7 +236,7 @@ module.exports = async (req, res) => {
     }
 
     // Vedančioji patvirtino, kad susitikimas įvyko: eilė iškart pereina prie kitos,
-    // data ir „negalėsiu“ žymos išvalomos – prasideda naujas balsavimas.
+    // data, pažymėtos dienos ir „negalėsiu“ žymos išvalomos – prasideda naujas balsavimas.
     if (req.method === "POST" && req.body && "completed" in req.body) {
       const doneId = String(req.body.completed || "").slice(0, 32);
       if (doneId && rotation.lastCompletedId === doneId) {
@@ -248,6 +250,8 @@ module.exports = async (req, res) => {
       await saveRotation(rotation);
       await store.cmd("DEL", "meeting");
       await store.cmd("DEL", "absent");
+      await store.cmd("DEL", "avail"); // naujas balsavimas – nuo tuščio kalendoriaus
+      for (const id of Object.keys(availability)) availability[id] = [];
       return res.status(200).json(view(rotation, users, availability, null, user, []));
     }
 
